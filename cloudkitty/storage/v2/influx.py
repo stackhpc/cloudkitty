@@ -143,9 +143,10 @@ class InfluxClient(object):
     @staticmethod
     def _get_filter(key, value):
         if isinstance(value, six.text_type):
-            format_string = "{}='{}'"
+            format_string = """"{}"='{}'"""
         elif isinstance(value, (six.integer_types, float)):
             format_string = "{}='{}'"
+            format_string = """"{}"={}"""
         return format_string.format(key, value)
 
     @staticmethod
@@ -174,7 +175,7 @@ class InfluxClient(object):
         query += self._get_type_query(types)
 
         if groupby:
-            groupby_query = ','.join(groupby)
+            groupby_query = '"' + '","'.join(groupby) + '"'
             query += ' GROUP BY ' + groupby_query
 
         query += ';'
