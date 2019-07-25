@@ -72,6 +72,14 @@ Section: ``collector_monasca``.
           section in "Metric collection" below for details on how to configure
           this.
 
+Nova
+----
+
+Section: ``collector_nova``.
+
+* ``auth_section``: Name of another section configuring authentication
+  parameters.
+
 Prometheus
 ----------
 

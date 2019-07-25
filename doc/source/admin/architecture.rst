@@ -90,12 +90,17 @@ Details about the configuration of each fetcher are available in the
 Collector
 =========
 
-There are three collectors available in CloudKitty:
+There are four collectors available in CloudKitty:
 
 * The ``gnocchi`` collector retrieves data from `Gnocchi`_. It can be used in
   an OpenStack context or with a standalone Gnocchi deployment.
 
 * The ``monasca`` collector retrieves data from `Monasca`_. Keystone
+  authentication is required for this collector.
+
+* The ``nova`` collector retrieves data from the `Nova`_. It only supports
+  metrics available through the `os-simple-tenant-usage API`_, namely number of
+  vCPUs and amount of memory and local disk for each instance. Keystone
   authentication is required for this collector.
 
 * The ``prometheus`` collector retrieves data from `Prometheus`_.
@@ -108,8 +113,10 @@ the `developer documentation`_.
 
 .. _developer documentation: ../developer/collector.html
 .. _collector configuration guide: configuration/collector.html
+.. _os-simple-tenant-usage API: https://docs.openstack.org/api-ref/compute/#usage-reports-os-simple-tenant-usage
 .. _Gnocchi: https://gnocchi.xyz/
 .. _Monasca: https://docs.openstack.org/monasca-api/latest/
+.. _Nova: https://docs.openstack.org/nova/latest/
 .. _Prometheus: https://prometheus.io/docs/introduction/overview/
 
 Rating

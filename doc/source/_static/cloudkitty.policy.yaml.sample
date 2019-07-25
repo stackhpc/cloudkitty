@@ -45,7 +45,7 @@
 # GET  /v1/info/config
 #"info:get_config": ""
 
-# Return the list of loaded modules in Cloudkitty.
+# Reture the list of loaded modules in Cloudkitty.
 # LIST  /v1/rating/modules
 #"rating:list_modules": "role:admin"
 
