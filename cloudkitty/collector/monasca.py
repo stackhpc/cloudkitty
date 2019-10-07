@@ -16,8 +16,6 @@
 # @author: Luka Peschke
 #
 from keystoneauth1 import loading as ks_loading
-from keystoneclient.v3 import client as ks_client
-from monascaclient import client as mclient
 from oslo_config import cfg
 from oslo_log import log as logging
 from voluptuous import All
@@ -27,9 +25,9 @@ from voluptuous import Required
 from voluptuous import Schema
 
 from cloudkitty import collector
+from cloudkitty.common import monasca_client as mon_client_utils
 from cloudkitty import transformer
 from cloudkitty import utils as ck_utils
-
 
 LOG = logging.getLogger(__name__)
 
@@ -73,11 +71,6 @@ MONASCA_EXTRA_SCHEMA = {
 }
 
 
-class EndpointNotFound(Exception):
-    """Exception raised if the Monasca endpoint is not found"""
-    pass
-
-
 class MonascaCollector(collector.BaseCollector):
     collector_name = 'monasca'
 
@@ -98,38 +91,8 @@ class MonascaCollector(collector.BaseCollector):
 
     def __init__(self, transformers, **kwargs):
         super(MonascaCollector, self).__init__(transformers, **kwargs)
-
-        self.auth = ks_loading.load_auth_from_conf_options(
-            CONF,
-            COLLECTOR_MONASCA_OPTS)
-        self.session = ks_loading.load_session_from_conf_options(
-            CONF,
-            COLLECTOR_MONASCA_OPTS,
-            auth=self.auth)
-        self.ks_client = ks_client.Client(session=self.session)
-        self.mon_endpoint = self._get_monasca_endpoint()
-        if not self.mon_endpoint:
-            raise EndpointNotFound()
-        self._conn = mclient.Client(
-            api_version=MONASCA_API_VERSION,
-            session=self.session,
-            endpoint=self.mon_endpoint)
-
-    # NOTE(lukapeschke) This function should be removed as soon as the endpoint
-    # it no longer required by monascaclient
-    def _get_monasca_endpoint(self):
-        service_name = cfg.CONF.collector_monasca.monasca_service_name
-        endpoint_interface_type = cfg.CONF.collector_monasca.interface
-
-        service_list = self.ks_client.services.list(name=service_name)
-        if not service_list:
-            return None
-        mon_service = service_list[0]
-        endpoints = self.ks_client.endpoints.list(mon_service.id)
-        for endpoint in endpoints:
-            if endpoint.interface == endpoint_interface_type:
-                return endpoint.url
-        return None
+        self._conn = mon_client_utils.get_monasca_client(
+            CONF, COLLECTOR_MONASCA_OPTS)
 
     def _get_metadata(self, metric_name, transformers, conf):
         info = {}
