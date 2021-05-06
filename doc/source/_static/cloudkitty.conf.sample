@@ -307,6 +307,9 @@
 # value)
 #auth_section = <None>
 
+# Endpoint URL type (defaults to internal) (string value)
+#endpoint_type = internal
+
 
 [collector_prometheus]
 

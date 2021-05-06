@@ -16,10 +16,10 @@ from keystoneauth1 import loading as ks_loading
 from novaclient import client as nclient
 
 
-def get_nova_client(conf, conf_opts):
+def get_nova_client(conf, conf_opts, **kwargs):
     ks_auth = ks_loading.load_auth_from_conf_options(conf, conf_opts)
     session = ks_loading.load_session_from_conf_options(
         conf,
         conf_opts,
         auth=ks_auth)
-    return nclient.Client(2, session=session)
+    return nclient.Client(2, session=session, endpoint_type=conf[conf_opts].endpoint_type)

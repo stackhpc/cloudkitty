@@ -31,6 +31,13 @@ COLLECTOR_NOVA_OPTS = 'collector_nova'
 CONF = cfg.CONF
 
 collector_nova_opts = ks_loading.get_auth_common_conf_options()
+collector_nova_opts.append(
+    cfg.StrOpt(
+        'endpoint_type',
+        default='internal',
+        help='Endpoint URL type (defaults to internal)',
+    )
+)
 cfg.CONF.register_opts(collector_nova_opts, COLLECTOR_NOVA_OPTS)
 CONF.register_opts(collector_nova_opts, COLLECTOR_NOVA_OPTS)
 ks_loading.register_auth_conf_options(CONF, COLLECTOR_NOVA_OPTS)
