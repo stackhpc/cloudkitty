@@ -30,3 +30,11 @@ class IndexDoesNotExist(BaseElasticsearchException):
         super(IndexDoesNotExist, self).__init__(
             "Elasticsearch index {} does not exist".format(index_name)
         )
+
+
+class IndexAliasAlreadyExists(BaseElasticsearchException):
+    def __init__(self, index_name):
+        super(IndexAliasAlreadyExists, self).__init__(
+            "Elasticsearch index alias {} already exists as an index".format(
+                index_name)
+        )

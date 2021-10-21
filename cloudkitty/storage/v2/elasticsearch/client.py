@@ -92,7 +92,8 @@ class ElasticsearchClient(object):
                            {'term': {'metadata.' + k: v}}]
         return should
 
-    def _build_composite(self, groupby):
+    @staticmethod
+    def _build_composite(groupby):
         if not groupby:
             return []
         sources = []
@@ -147,11 +148,121 @@ class ElasticsearchClient(object):
         self._log_query(url, data, output)
         return output
 
+    def _req_unsafe(self, method, url, data, params):
+        """Request without exception on invalid HTTP codes."""
+        return method(url, data=data, params=params)
+
+    def _req_exists(self, url, data, params):
+        r = self._sess.head(url, data=data, params=params)
+        if r.status_code == 200:
+            return True
+        elif r.status_code == 404:
+            return False
+        else:
+            raise exceptions.InvalidStatusCode(
+                "200/404", r.status_code, r.text, None)
+
+    @staticmethod
+    def build_index_template(index_pattern, component_templates, mapping):
+        """Build an index template for mapping."""
+        # High priority template to avoid being overridden.
+        template_priority = 500
+        return {
+            "index_patterns": [index_pattern],
+            "priority": template_priority,
+            "composed_of": component_templates,
+            "template": {
+                "mappings": mapping
+            }
+        }
+
+    def put_index_template(self, template_name, template):
+        """Does a PUT request against the ES template API.
+
+        Does a PUT request against `/_template/<template_name>`
+        if es6 or `/_index_template/<template_name>` if es7.
+
+        :param template_name: index template name
+        :type template_name: string
+        :param template: index template
+        :type template: dict
+        :rtype: requests.models.Response
+        """
+        url = '/'.join(
+            (self._url, '_index_template', template_name))
+        data = json.dumps(template)
+        LOG.debug('Creating index template {} with data:\n{}'.format(
+            template_name, data))
+        return self._req(
+            self._sess.put, url, data, None, deserialize=False)
+
+    def put_first_index(self):
+        """Does a PUT request against the ES index API.
+
+        Does a PUT request against `/<index_name>-{now/d}-000001`.
+
+        Creates a dated index with an alias for which it is the write index.
+
+        :rtype: requests.models.Response
+        """
+        # Percent encode the / (%2F) in the date math for the index name
+        index_string = "<{}{}>".format(self._index_name, "-{now%2Fd}-000001")
+        url = '/'.join((self._url, index_string))
+        aliases = {
+            "aliases": {
+                self._index_name: {
+                    "is_write_index": True
+                }
+            }
+        }
+        LOG.debug('Creating index {} with data:\n{}'.format(
+            index_string, json.dumps(aliases)))
+        return self._req(
+            self._sess.put, url, json.dumps(aliases), None, deserialize=False)
+
+    def post_index_rollover(self):
+        """Does a POST request against the ES index API.
+
+        Does a POST request against `/<index_name>/_rollover`.
+
+        Performs a rollover of the index alias.
+
+        :rtype: requests.models.Response
+        """
+        url = '/'.join((self._url, self._index_name, '_rollover'))
+        self._req(self._sess.post, url, None, None, deserialize=False)
+
+    def exists_index(self):
+        """Does a HEAD request against the ES index API.
+
+        Does a HEAD request against `/<index_name>`.
+
+        Tests if an index or index alias exists.
+
+        :rtype: Boolean
+        """
+        url = '/'.join((self._url, self._index_name))
+        param = {"allow_no_indices": "false"}
+        return self._req_exists(url, None, param)
+
+    def is_index_alias(self):
+        """Does a HEAD request against the ES alias API.
+
+        Does a HEAD request against `/_alias/<index_name>`.
+
+        Tests if an index alias exists.
+
+        :rtype: Boolean
+        """
+        url = '/'.join((self._url, '_alias', self._index_name))
+        return self._req_exists(url, None, None)
+
     def put_mapping(self, mapping):
         """Does a PUT request against ES's mapping API.
 
-        The PUT request will be done against
-        `/<index_name>/_mapping/<mapping_name>`
+        Does a PUT request against `/<index_name>/_mapping/<mapping_name>`
+
+        Creates or updates an index mapping.
 
         :mapping: body of the request
         :type mapping: dict
@@ -168,7 +279,7 @@ class ElasticsearchClient(object):
     def get_index(self):
         """Does a GET request against ES's index API.
 
-        The GET request will be done against `/<index_name>`
+        Does a GET request against `/<index_name>`
 
         :rtype: requests.models.Response
         """
@@ -360,7 +471,7 @@ class ElasticsearchClient(object):
 
         must = self._build_must(begin, end, metric_types, filters)
         should = self._build_should(filters)
-        composite = self._build_composite(groupby) if groupby else None
+        composite = self._build_composite(groupby)
         if composite:
             composite['size'] = self._chunk_size
         query = self._build_query(must, should, composite)

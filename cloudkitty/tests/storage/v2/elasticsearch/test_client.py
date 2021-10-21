@@ -20,6 +20,7 @@ from unittest import mock
 from dateutil import tz
 
 from cloudkitty import dataframe
+import cloudkitty.storage.v2.elasticsearch
 from cloudkitty.storage.v2.elasticsearch import client
 from cloudkitty.storage.v2.elasticsearch import exceptions
 
@@ -180,6 +181,137 @@ class TestElasticsearchClient(unittest.TestCase):
         self.assertRaises(exceptions.InvalidStatusCode,
                           self.client._req,
                           method_mock, None, None, None)
+
+    def test_req_unsafe(self):
+        url = '/endpoint'
+        data = {'1': 'one'}
+        params = {'v'}
+        resp_mock = mock.MagicMock()
+        resp_mock.status_code = 400
+        method_mock = mock.MagicMock()
+        method_mock.return_value = resp_mock
+        req_resp = self.client._req_unsafe(
+            method_mock, url, data, params)
+        method_mock.assert_called_once_with(
+            url, data=data, params=params)
+        self.assertEqual(req_resp, resp_mock)
+
+    def test_req_exists(self):
+        url = '/endpoint'
+        data = {'1': 'one'}
+        params = {'v'}
+        resp_mock = mock.MagicMock()
+        resp_mock.status_code = 200
+        with mock.patch.object(self.client._sess, 'head') as hmock:
+            hmock.return_value = resp_mock
+            self.client._req_exists(
+                url, data=data, params=params)
+            hmock.assert_called_once_with(
+                url, data=data, params=params)
+
+    def test_req_exists_true(self):
+        url = '/endpoint'
+        resp_mock = mock.MagicMock()
+        resp_mock.status_code = 200
+        with mock.patch.object(self.client._sess, 'head') as hmock:
+            hmock.return_value = resp_mock
+            self.assertTrue(self.client._req_exists(
+                url, data=None, params=None))
+
+    def test_req_exists_false(self):
+        url = '/endpoint'
+        resp_mock = mock.MagicMock()
+        resp_mock.status_code = 404
+        with mock.patch.object(self.client._sess, 'head') as hmock:
+            hmock.return_value = resp_mock
+            self.assertFalse(self.client._req_exists(
+                url, data=None, params=None))
+
+    def test_req_exists_exception(self):
+        url = '/endpoint'
+        resp_mock = mock.MagicMock()
+        resp_mock.status_code = 418  # I'm a teapot
+        with mock.patch.object(self.client._sess, 'head') as hmock:
+            hmock.return_value = resp_mock
+            self.assertRaises(exceptions.InvalidStatusCode,
+                              self.client._req_exists,
+                              url, data=None, params=None)
+
+    def test_build_index_template(self):
+        index_pattern = "cloudkitty-*"
+        mapping = cloudkitty.storage.v2.elasticsearch.CLOUDKITTY_INDEX_MAPPING
+        component_templates = ["cloudkitty_settings"]
+        expected = {
+            "index_patterns": ["cloudkitty-*"],
+            "priority": 500,
+            "composed_of": component_templates,
+            "template": {
+                "mappings": mapping
+            }
+        }
+        self.assertEqual(
+            self.client.build_index_template(
+                index_pattern, component_templates, mapping), expected)
+
+    def test_put_index_template(self):
+        template_name = 'test_template'
+        template = {
+            "index_patterns": ["index_name-*"],
+            "priority": 500,
+            "template": {
+                "mappings": "fake_mapping"
+            }
+        }
+        expected_data = \
+            ('{"index_patterns": ["index_name-*"], "priority": 500, '
+                '"template": {"mappings": "fake_mapping"}}')
+        with mock.patch.object(self.client, '_req') as rmock:
+            self.client.put_index_template(
+                template_name, template)
+            rmock.assert_called_once_with(
+                self.client._sess.put,
+                'http://elasticsearch:9200/_index_template/test_template',
+                expected_data, None, deserialize=False)
+
+    def test_put_first_index(self):
+        expected_data = '{"aliases": {"index_name": {"is_write_index": true}}}'
+        with mock.patch.object(self.client, '_req') as rmock:
+            self.client.put_first_index()
+            rmock.assert_called_once_with(
+                self.client._sess.put,
+                'http://elasticsearch:9200/<index_name-{now%2Fd}-000001>',
+                expected_data, None, deserialize=False)
+
+    def test_post_index_rollover(self):
+        with mock.patch.object(self.client, '_req') as rmock:
+            self.client.post_index_rollover()
+            rmock.assert_called_once_with(
+                self.client._sess.post,
+                'http://elasticsearch:9200/index_name/_rollover',
+                None, None, deserialize=False)
+
+    def test_exists_index(self):
+        expected_param = {"allow_no_indices": "false"}
+        resp_mock = mock.MagicMock()
+        resp_mock.status_code = 200
+        with mock.patch.object(self.client._sess, 'head') as hmock:
+            hmock.return_value = resp_mock
+            r = self.client.exists_index()
+            hmock.assert_called_once_with(
+                'http://elasticsearch:9200/index_name',
+                data=None, params=expected_param)
+            self.assertTrue(r)
+
+    def test_is_index_alias(self):
+        resp_mock = mock.MagicMock()
+        resp_mock.status_code = 200
+        with mock.patch.object(self.client._sess, 'head') as hmock:
+            hmock.return_value = resp_mock
+            r = self.client.is_index_alias()
+            hmock.assert_called_once_with(
+                'http://elasticsearch:9200/_alias/index_name',
+                data=None, params=None)
+            self.assertTrue(r)
 
     def test_put_mapping(self):
         mapping = {'a': 'b'}

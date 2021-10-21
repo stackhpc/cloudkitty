@@ -37,21 +37,35 @@ elasticsearch_storage_opts = [
         default='http://localhost:9200'),
     cfg.StrOpt(
         'index_name',
-        help='Elasticsearch index to use. Defaults to "cloudkitty".',
+        help='Elasticsearch index to use. '
+             'Defaults to "cloudkitty".',
         default='cloudkitty'),
-    cfg.BoolOpt('insecure',
-                help='Set to true to allow insecure HTTPS '
-                     'connections to Elasticsearch',
-                default=False),
-    cfg.StrOpt('cafile',
-               help='Path of the CA certificate to trust for '
-                    'HTTPS connections.',
-               default=None),
-    cfg.IntOpt('scroll_duration',
-               help="Duration (in seconds) for which the ES scroll contexts "
-                    "should be kept alive.",
-               advanced=True,
-               default=30, min=0, max=300),
+    cfg.StrOpt(
+        'template_name',
+        help='Elasticsearch template name to use. '
+             'Defaults to "cloudkitty_mapping".',
+        default='cloudkitty_mapping'),
+    cfg.ListOpt(
+        'component_templates',
+        help='List of Elasticsearch component template '
+             'names to include in the index template. ',
+        default=[]),
+    cfg.BoolOpt(
+        'insecure',
+        help='Set to true to allow insecure HTTPS '
+             'connections to Elasticsearch',
+        default=False),
+    cfg.StrOpt(
+        'cafile',
+        help='Path of the CA certificate to trust for '
+             'HTTPS connections.',
+        default=None),
+    cfg.IntOpt(
+        'scroll_duration',
+        help="Duration (in seconds) for which the ES scroll contexts "
+             "should be kept alive.",
+        advanced=True,
+        default=30, min=0, max=300)
 ]
 
 CONF.register_opts(elasticsearch_storage_opts, ELASTICSEARCH_STORAGE_GROUP)
@@ -100,14 +114,31 @@ class ElasticsearchStorage(v2_storage.BaseStorage):
             verify=verify)
 
     def init(self):
-        r = self._conn.get_index()
-        if r.status_code != 200:
-            raise exceptions.IndexDoesNotExist(
-                CONF.storage_elasticsearch.index_name)
-        LOG.info('Creating mapping "_doc" on index {}...'.format(
+        LOG.info('Creating index template for mapping.')
+        index_pattern = "{}-*".format(CONF.storage_elasticsearch.index_name)
+        component_templates = CONF.storage_elasticsearch.component_templates
+        index_template = self._conn.build_index_template(
+            index_pattern, component_templates, CLOUDKITTY_INDEX_MAPPING)
+        self._conn.put_index_template(
+            CONF.storage_elasticsearch.template_name, index_template)
+        LOG.info('Index template for mapping created.')
+
+        # If index_name exists, test to ensure it is an alias
+        if self._conn.exists_index():
+            if not self._conn.is_index_alias():
+                raise exceptions.IndexAliasAlreadyExists(
+                    CONF.storage_elasticsearch.index_name)
+            LOG.info('Index alias already exists. Skipping creation.')
+
+        # Otherwise create a dated index with index_name as an alias
+        else:
+            LOG.info('Creating first index.')
+            self._conn.put_first_index()
+
+        # Rollover index on startup
+        LOG.info('Rolling over index {}'.format(
             CONF.storage_elasticsearch.index_name))
-        self._conn.put_mapping(CLOUDKITTY_INDEX_MAPPING)
-        LOG.info('Mapping created.')
+        self._conn.post_index_rollover()
 
     def push(self, dataframes, scope_id=None):
         for frame in dataframes:
