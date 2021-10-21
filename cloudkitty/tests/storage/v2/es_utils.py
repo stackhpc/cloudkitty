@@ -26,7 +26,10 @@ class FakeElasticsearchClient(client.ElasticsearchClient):
     def __init__(self, *args, **kwargs):
         kwargs["autocommit"] = False
         super(FakeElasticsearchClient, self).__init__(*args, **kwargs)
-        for method in ('get_index', 'put_mapping'):
+        for method in ('exists_index',
+                       'is_index_alias',
+                       'get_index',
+                       'put_mapping'):
             setattr(self, method, self.__base_response)
 
     @staticmethod

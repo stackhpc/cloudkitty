@@ -242,12 +242,6 @@ function create_influxdb_database {
     fi
 }
 
-function create_elasticsearch_index {
-    if [ "$CLOUDKITTY_STORAGE_BACKEND" == "elasticsearch" ]; then
-        curl -XPUT "${CLOUDKITTY_ELASTICSEARCH_HOST}/${CLOUDKITTY_ELASTICSEARCH_INDEX}"
-    fi
-}
-
 # init_cloudkitty() - Initialize CloudKitty database
 function init_cloudkitty {
     # Delete existing cache
@@ -264,7 +258,6 @@ function init_cloudkitty {
     recreate_database cloudkitty utf8
 
     create_influxdb_database
-    create_elasticsearch_index
 
     # Migrate cloudkitty database
     $CLOUDKITTY_BIN_DIR/cloudkitty-dbsync upgrade
@@ -301,15 +294,42 @@ function install_influx {
     sudo systemctl start influxdb || sudo systemctl restart influxdb
 }
 
+# Remove Elasticsearch package if present
+function _cleanup_elasticsearch_ubuntu {
+    if sudo dpkg --list elasticsearch; then
+	sudo dpkg --purge elasticsearch
+    fi
+    _cleanup_elasticsearch_data
+}
+
+function _cleanup_elasticsearch_fedora {
+    if sudo rpm -q elasticsearch; then
+	sudo yum remove elasticsearch -y
+    fi
+    _cleanup_elasticsearch_data
+}
+
+# Remove Elasticsearch data if present
+function _cleanup_elasticsearch_data {
+    if [[ -d /var/lib/elasticsearch ]]; then
+        sudo rm -rf /var/lib/elasticsearch
+    fi
+    if [[ -d /etc/elasticsearch ]]; then
+        sudo rm -rf /etc/elasticsearch
+    fi
+}
+
 function install_elasticsearch_ubuntu {
+    _cleanup_elasticsearch_ubuntu
     sudo apt install -qy openjdk-8-jre
-    local elasticsearch_file=$(get_extra_file https://artifacts.elastic.co/downloads/elasticsearch/elasticsearch-6.8.3.deb)
-    sudo dpkg -i --skip-same-version ${elasticsearch_file}
+    local elasticsearch_file=$(get_extra_file https://artifacts.elastic.co/downloads/elasticsearch/elasticsearch-7.16.3-amd64.deb)
+    sudo dpkg -i ${elasticsearch_file}
 }
 
 function install_elasticsearch_fedora {
+    _cleanup_elasticsearch_fedora
     sudo yum install -y java-1.8.0-openjdk
-    local elasticsearch_file=$(get_extra_file https://artifacts.elastic.co/downloads/elasticsearch/elasticsearch-6.8.3.rpm)
+    local elasticsearch_file=$(get_extra_file https://artifacts.elastic.co/downloads/elasticsearch/elasticsearch-7.16.3-x86_64.rpm)
     sudo yum localinstall -y ${elasticsearch_file}
 }
 
@@ -322,6 +342,10 @@ function install_elasticsearch {
         die $LINENO "Distribution must be Debian or Fedora-based"
     fi
     sudo systemctl start elasticsearch || sudo systemctl restart elasticsearch
+    echo "Waiting a minute for Elasticsearch to start..."
+    if ! wait_for_service 60 http://localhost:9200/; then
+        die $LINENO "Elasticsearch did not start"
+    fi
 }
 
 # install_cloudkitty() - Collect source and prepare

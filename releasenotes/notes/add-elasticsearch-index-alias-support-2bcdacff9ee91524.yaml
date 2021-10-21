@@ -1,0 +1,17 @@
+---
+prelude: >
+    Improves support for Elasticsearch storage backend. Requires Elasticsearch 7.
+features:
+  - |
+    Improves support for Elasticsearch storage backend. Requires Elasticsearch 7.
+    Provides an index template to manage cloudkitty document mappings with the
+    option to include user provided component templates.
+    Uses dated indices and an index alias to allow for better management of data.
+upgrade:
+  - |
+    Improves support for Elasticsearch storage backend. Requires Elasticsearch 7.
+    The config setting 'index_name' now refers to the index alias used to
+    reference the latest cloudkitty index. If no index or index alias exists on
+    first run then they will be created. If 'index_name' already exists and is
+    not an alias then initialisation will fail - a simple solution is to use a
+    new 'index_name' and reindex existing data into the first index created.
