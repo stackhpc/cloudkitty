@@ -198,6 +198,8 @@ class PrometheusCollector(collector.BaseCollector):
             ', '.join(groupby + metadata)
         )
 
+        LOG.debug("Calling Prometheus with query: %s", query)
+
         try:
             res = self._conn.get_instant(
                 query,
