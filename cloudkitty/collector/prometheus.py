@@ -18,7 +18,6 @@ from decimal import ROUND_HALF_UP
 
 from oslo_config import cfg
 from oslo_log import log
-from voluptuous import All
 from voluptuous import In
 from voluptuous import Optional
 from voluptuous import Required
@@ -84,8 +83,7 @@ PROMETHEUS_EXTRA_SCHEMA = {
                 'changes', 'delta', 'deriv',
                 'idelta', 'irange', 'irate',
                 'rate'
-            ]),
-        Optional('query_suffix', default=''): All(str),
+            ])
     }
 }
 
@@ -161,7 +159,6 @@ class PrometheusCollector(collector.BaseCollector):
             'range_function')
         groupby = self.conf[metric_name].get('groupby', [])
         metadata = self.conf[metric_name].get('metadata', [])
-        query_suffix = self.conf[metric_name]['extra_args']['query_suffix']
         period = tzutils.diff_seconds(end, start)
         time = end
 
@@ -200,10 +197,6 @@ class PrometheusCollector(collector.BaseCollector):
             query,
             ', '.join(groupby + metadata)
         )
-
-        # Append custom query suffix
-        if query_suffix:
-            query = "{0} {1}".format(query, query_suffix)
 
         LOG.debug("Calling Prometheus with query: %s", query)
 
