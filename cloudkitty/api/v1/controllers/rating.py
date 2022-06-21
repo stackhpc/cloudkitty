@@ -15,7 +15,6 @@
 #
 from oslo_concurrency import lockutils
 from oslo_log import log
-
 import pecan
 from pecan import rest
 
