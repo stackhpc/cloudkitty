@@ -135,6 +135,8 @@ class MetricConfigValidationTest(tests.TestCase):
         expected_output['metric_one']['groupby'].append('project_id')
         expected_output['metric_one']['extra_args'] = {
             'aggregation_method': 'max',
+            'query_prefix': '',
+            'query_suffix': '',
         }
         self.assertEqual(
             collector.prometheus.PrometheusCollector.check_configuration(data),
@@ -147,6 +149,8 @@ class MetricConfigValidationTest(tests.TestCase):
         expected_output['metric_one']['groupby'].append('project_id')
         expected_output['metric_one']['extra_args'] = {
             'aggregation_method': 'max',
+            'query_prefix': '',
+            'query_suffix': '',
         }
         self.assertEqual(
             collector.prometheus.PrometheusCollector.check_configuration(data),
@@ -158,6 +162,8 @@ class MetricConfigValidationTest(tests.TestCase):
         data['metrics']['metric_one']['extra_args'] = {
             'aggregation_method': 'max',
             'query_function': 'abs',
+            'query_prefix': 'custom_prefix',
+            'query_suffix': 'custom_suffix',
             'range_function': 'delta',
         }
         expected_output = copy.deepcopy(self.base_output)
@@ -165,6 +171,8 @@ class MetricConfigValidationTest(tests.TestCase):
         expected_output['metric_one']['extra_args'] = {
             'aggregation_method': 'max',
             'query_function': 'abs',
+            'query_prefix': 'custom_prefix',
+            'query_suffix': 'custom_suffix',
             'range_function': 'delta',
         }
 
@@ -180,3 +188,26 @@ class MetricConfigValidationTest(tests.TestCase):
             self.assertRaises(
                 collector.InvalidConfiguration,
                 collector.check_duplicates, metric_name, metric)
+
+    def test_validate_map_mutator(self):
+        data = copy.deepcopy(self.base_data)
+
+        # Check that validation succeeds when MAP mutator is not used
+        for metric_name, metric in data['metrics'].items():
+            collector.validate_map_mutator(metric_name, metric)
+
+        # Check that validation raises an exception when mutate_map is missing
+        for metric_name, metric in data['metrics'].items():
+            metric['mutate'] = 'MAP'
+            self.assertRaises(
+                collector.InvalidConfiguration,
+                collector.validate_map_mutator, metric_name, metric)
+
+        data = copy.deepcopy(self.base_data)
+        # Check that validation raises an exception when mutate_map is present
+        # but MAP mutator is not used
+        for metric_name, metric in data['metrics'].items():
+            metric['mutate_map'] = {}
+            self.assertRaises(
+                collector.InvalidConfiguration,
+                collector.validate_map_mutator, metric_name, metric)
