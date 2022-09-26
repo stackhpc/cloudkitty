@@ -17,6 +17,7 @@ from oslo_concurrency import lockutils
 from oslo_log import log
 import pecan
 from pecan import rest
+
 from stevedore import extension
 from wsme import types as wtypes
 import wsmeext.pecan as wsme_pecan
