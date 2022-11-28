@@ -301,27 +301,36 @@ function install_influx {
     sudo systemctl start influxdb || sudo systemctl restart influxdb
 }
 
-function install_elasticsearch_ubuntu {
+function install_java_ubuntu {
     sudo apt install -qy openjdk-8-jre
-    local elasticsearch_file=$(get_extra_file https://artifacts.elastic.co/downloads/elasticsearch/elasticsearch-6.8.3.deb)
-    sudo dpkg -i --skip-same-version ${elasticsearch_file}
 }
 
-function install_elasticsearch_fedora {
+function install_java_fedora {
     sudo yum install -y java-1.8.0-openjdk
-    local elasticsearch_file=$(get_extra_file https://artifacts.elastic.co/downloads/elasticsearch/elasticsearch-6.8.3.rpm)
-    sudo yum localinstall -y ${elasticsearch_file}
 }
 
-function install_elasticsearch {
+function install_opensearch {
     if is_ubuntu; then
-        install_elasticsearch_ubuntu
+        install_java_ubuntu
     elif is_fedora; then
-        install_elasticsearch_fedora
+        install_java_fedora
     else
         die $LINENO "Distribution must be Debian or Fedora-based"
     fi
-    sudo systemctl start elasticsearch || sudo systemctl restart elasticsearch
+
+    OPENSEARCH_HOME=/usr/share/opensearch
+    local opensearch_file=$(get_extra_file "https://artifacts.opensearch.org/releases/bundle/opensearch/2.3.0/opensearch-2.3.0-linux-x64.tar.gz")
+
+    sudo mkdir -p $OPENSEARCH_HOME
+    sudo tar -xzpf ${opensearch_file} -C $OPENSEARCH_HOME --strip-components=1
+    sudo mkdir -p $OPENSEARCH_HOME/data /var/log/opensearch
+    sudo chown -R $STACK_USER $OPENSEARCH_HOME/data /var/log/opensearch
+    cat - <<EOF | sudo tee $OPENSEARCH_HOME/config/opensearch.yml >/dev/null
+path.data: /usr/share/opensearch/data
+path.logs: /var/log/opensearch
+plugins.security.disabled: true
+EOF
+    run_process opensearch "$OPENSEARCH_HOME/bin/opensearch"
 }
 
 # install_cloudkitty() - Collect source and prepare
@@ -332,7 +341,7 @@ function install_cloudkitty {
     if [ $CLOUDKITTY_STORAGE_BACKEND == 'influxdb' ]; then
         install_influx
     elif [ $CLOUDKITTY_STORAGE_BACKEND == 'elasticsearch' ]; then
-        install_elasticsearch
+        install_opensearch
     fi
 }
 
