@@ -301,20 +301,29 @@ function install_influx {
     sudo systemctl start influxdb || sudo systemctl restart influxdb
 }
 
+function install_opensearch_ubuntu {
+    local opensearch_file=$(get_extra_file https://artifacts.opensearch.org/releases/bundle/opensearch/2.5.0/opensearch-2.5.0-linux-x64.deb)
+    sudo dpkg -i --skip-same-version ${opensearch_file}
+}
+
+function install_opensearch_fedora {
+    local opensearch_file=$(get_extra_file https://artifacts.opensearch.org/releases/bundle/opensearch/2.5.0/opensearch-2.5.0-linux-x64.rpm)
+    sudo yum localinstall -y ${opensearch_file}
+}
+
 function install_opensearch {
-    OPENSEARCH_HOME=/usr/share/opensearch
-    local opensearch_file=$(get_extra_file "https://artifacts.opensearch.org/releases/bundle/opensearch/1.3.6/opensearch-1.3.6-linux-x64.tar.gz")
-    sudo mkdir -p $OPENSEARCH_HOME
-    sudo tar -xzpf ${opensearch_file} -C $OPENSEARCH_HOME --strip-components=1
-    sudo mkdir -p $OPENSEARCH_HOME/data /var/log/opensearch
-    sudo chown -R $STACK_USER $OPENSEARCH_HOME /var/log/opensearch
-    cat - <<EOF | sudo tee $OPENSEARCH_HOME/config/opensearch.yml >/dev/null
-discovery.type: single-node
-path.data: /usr/share/opensearch/data
-path.logs: /var/log/opensearch
-plugins.security.disabled: true
-EOF
-    _run_under_systemd opensearch "$OPENSEARCH_HOME/bin/opensearch"
+    if is_ubuntu; then
+        install_opensearch_ubuntu
+    elif is_fedora; then
+        install_opensearch_fedora
+    else
+        die $LINENO "Distribution must be Debian or Fedora-based"
+    fi
+    if ! sudo grep plugins.security.disabled /etc/opensearch/opensearch.yml >/dev/null; then
+        echo "plugins.security.disabled: true" | sudo tee -a /etc/opensearch/opensearch.yml >/dev/null
+    fi
+    sudo systemctl enable opensearch
+    sudo systemctl start opensearch || sudo systemctl restart opensearch
 }
 
 # install_cloudkitty() - Collect source and prepare
