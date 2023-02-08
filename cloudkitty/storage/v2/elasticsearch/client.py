@@ -158,12 +158,9 @@ class ElasticsearchClient(object):
         :rtype: requests.models.Response
         """
         url = '/'.join(
-            (self._url, self._index_name, '_mapping', self._mapping_name))
-        # NOTE(peschk_l): This is done for compatibility with
-        # Elasticsearch 6 and 7.
-        param = {"include_type_name": "true"}
+            (self._url, self._index_name, self._mapping_name))
         return self._req(
-            self._sess.put, url, json.dumps(mapping), param, deserialize=False)
+            self._sess.post, url, json.dumps(mapping), {}, deserialize=False)
 
     def get_index(self):
         """Does a GET request against ES's index API.
