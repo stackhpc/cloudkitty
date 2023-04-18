@@ -1384,6 +1384,37 @@
 #scroll_duration = 30
 
 
+[storage_opensearch]
+
+#
+# From cloudkitty.common.config
+#
+
+# OpenSearch host, along with port and protocol. Defaults to
+# http://localhost:9200 (string value)
+#host = http://localhost:9200
+
+# OpenSearch index to use. Defaults to "cloudkitty". (string value)
+#index_name = cloudkitty
+
+# Set to true to allow insecure HTTPS connections to OpenSearch
+# (boolean value)
+#insecure = false
+
+# Path of the CA certificate to trust for HTTPS connections. (string
+# value)
+#cafile = <None>
+
+# Duration (in seconds) for which the ES scroll contexts should be
+# kept alive. (integer value)
+# Minimum value: 0
+# Maximum value: 300
+# Advanced Option: intended for advanced users and not used
+# by the majority of users, and might have a significant
+# effect on stability and/or performance.
+#scroll_duration = 30
+
+
 [storage_gnocchi]
 
 #

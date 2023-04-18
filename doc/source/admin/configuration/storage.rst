@@ -27,6 +27,7 @@ the configuration file. The following options are available:
 
   - ``influxdb``
   - ``elasticsearch``
+  - ``opensearch``
 
 Driver-specific options
 =======================
@@ -87,6 +88,24 @@ Section ``storage_elasticsearch``:
 
 * ``insecure``: Defaults to ``false``. Set to true to allow insecure HTTPS
   connections to Elasticsearch.
+
+* ``cafile``: Path of the CA certificate to trust for HTTPS connections.
+
+* ``scroll_duration``: Defaults to 30. Duration (in seconds) for which the ES
+  scroll contexts should be kept alive.
+
+OpenSearch (v2)
+------------------
+
+Section ``storage_opensearch``:
+
+* ``host``: Defaults to ``http://localhost:9200``. Opensearch host, along
+  with port and protocol.
+
+* ``index_name``: Defaults to ``cloudkitty``. Opensearch index to use.
+
+* ``insecure``: Defaults to ``false``. Set to true to allow insecure HTTPS
+  connections to Opensearch.
 
 * ``cafile``: Path of the CA certificate to trust for HTTPS connections.
 
