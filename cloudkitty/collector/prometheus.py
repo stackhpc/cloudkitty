@@ -213,6 +213,8 @@ class PrometheusCollector(collector.BaseCollector):
         if query_suffix:
             query = "{0} {1}".format(query, query_suffix)
 
+        LOG.debug("Calling Prometheus with query: %s", query)
+
         try:
             res = self._conn.get_instant(
                 query,
