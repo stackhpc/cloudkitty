@@ -301,27 +301,29 @@ function install_influx {
     sudo systemctl start influxdb || sudo systemctl restart influxdb
 }
 
-function install_elasticsearch_ubuntu {
-    sudo apt install -qy openjdk-8-jre
-    local elasticsearch_file=$(get_extra_file https://artifacts.elastic.co/downloads/elasticsearch/elasticsearch-6.8.3.deb)
-    sudo dpkg -i --skip-same-version ${elasticsearch_file}
+function install_opensearch_ubuntu {
+    local opensearch_file=$(get_extra_file https://artifacts.opensearch.org/releases/bundle/opensearch/2.5.0/opensearch-2.5.0-linux-x64.deb)
+    sudo dpkg -i --skip-same-version ${opensearch_file}
 }
 
-function install_elasticsearch_fedora {
-    sudo yum install -y java-1.8.0-openjdk
-    local elasticsearch_file=$(get_extra_file https://artifacts.elastic.co/downloads/elasticsearch/elasticsearch-6.8.3.rpm)
-    sudo yum localinstall -y ${elasticsearch_file}
+function install_opensearch_fedora {
+    local opensearch_file=$(get_extra_file https://artifacts.opensearch.org/releases/bundle/opensearch/2.5.0/opensearch-2.5.0-linux-x64.rpm)
+    sudo yum localinstall -y ${opensearch_file}
 }
 
-function install_elasticsearch {
+function install_opensearch {
     if is_ubuntu; then
-        install_elasticsearch_ubuntu
+        install_opensearch_ubuntu
     elif is_fedora; then
-        install_elasticsearch_fedora
+        install_opensearch_fedora
     else
         die $LINENO "Distribution must be Debian or Fedora-based"
     fi
-    sudo systemctl start elasticsearch || sudo systemctl restart elasticsearch
+    if ! sudo grep plugins.security.disabled /etc/opensearch/opensearch.yml >/dev/null; then
+        echo "plugins.security.disabled: true" | sudo tee -a /etc/opensearch/opensearch.yml >/dev/null
+    fi
+    sudo systemctl enable opensearch
+    sudo systemctl start opensearch || sudo systemctl restart opensearch
 }
 
 # install_cloudkitty() - Collect source and prepare
