@@ -147,7 +147,7 @@ class OpenSearchClient(object):
         self._log_query(url, data, output)
         return output
 
-    def put_mapping(self, mapping):
+    def post_mapping(self, mapping):
         """Does a POST request against OpenSearch's mapping API.
 
         The POST request will be done against

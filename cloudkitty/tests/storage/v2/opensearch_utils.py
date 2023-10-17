@@ -26,7 +26,7 @@ class FakeOpenSearchClient(client.OpenSearchClient):
     def __init__(self, *args, **kwargs):
         kwargs["autocommit"] = False
         super(FakeOpenSearchClient, self).__init__(*args, **kwargs)
-        for method in ('get_index', 'put_mapping'):
+        for method in ('get_index', 'post_mapping'):
             setattr(self, method, self.__base_response)
 
     @staticmethod

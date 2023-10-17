@@ -106,7 +106,7 @@ class OpenSearchStorage(v2_storage.BaseStorage):
                 CONF.storage_opensearch.index_name)
         LOG.info('Creating mapping "_doc" on index {}...'.format(
             CONF.storage_opensearch.index_name))
-        self._conn.put_mapping(CLOUDKITTY_INDEX_MAPPING)
+        self._conn.post_mapping(CLOUDKITTY_INDEX_MAPPING)
         LOG.info('Mapping created.')
 
     def push(self, dataframes, scope_id=None):

@@ -181,10 +181,10 @@ class TestOpenSearchClient(unittest.TestCase):
                           self.client._req,
                           method_mock, None, None, None)
 
-    def test_put_mapping(self):
+    def test_post_mapping(self):
         mapping = {'a': 'b'}
         with mock.patch.object(self.client, '_req') as rmock:
-            self.client.put_mapping(mapping)
+            self.client.post_mapping(mapping)
             rmock.assert_called_once_with(
                 self.client._sess.post,
                 'http://opensearch:9200/index_name/test_mapping',
