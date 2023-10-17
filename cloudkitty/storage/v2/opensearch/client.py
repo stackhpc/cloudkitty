@@ -225,7 +225,7 @@ class OpenSearchClient(object):
         """Does a POST request against OpenSearch's bulk API
 
         The POST request will be done against
-        `/<index_name>/<mapping_name>/_bulk`
+        `/<index_name>/_bulk`
 
         The instruction will be appended before each term. For example,
         bulk_with_instruction('instr', ['one', 'two']) will produce::
@@ -246,7 +246,7 @@ class OpenSearchClient(object):
             *[(instruction, json.dumps(term)) for term in terms]
         )) + '\n'
         url = '/'.join(
-            (self._url, self._index_name, self._mapping_name, '_bulk'))
+            (self._url, self._index_name, '_bulk'))
         return self._req(self._sess.post, url, data, None, deserialize=False)
 
     def bulk_index(self, terms):
