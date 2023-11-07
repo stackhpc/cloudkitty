@@ -259,7 +259,7 @@ class TestElasticsearchClient(unittest.TestCase):
             self.client.bulk_with_instruction(instruction, terms)
             rmock.assert_called_once_with(
                 self.client._sess.post,
-                'http://elasticsearch:9200/index_name/test_mapping/_bulk',
+                'http://elasticsearch:9200/index_name/_bulk',
                 expected_data, None, deserialize=False)
 
     def test_bulk_index(self):
