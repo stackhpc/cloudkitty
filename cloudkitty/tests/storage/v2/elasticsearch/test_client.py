@@ -186,9 +186,9 @@ class TestElasticsearchClient(unittest.TestCase):
         with mock.patch.object(self.client, '_req') as rmock:
             self.client.put_mapping(mapping)
             rmock.assert_called_once_with(
-                self.client._sess.put,
-                'http://elasticsearch:9200/index_name/_mapping/test_mapping',
-                '{"a": "b"}', {'include_type_name': 'true'}, deserialize=False)
+                self.client._sess.post,
+                'http://elasticsearch:9200/index_name/test_mapping',
+                '{"a": "b"}', {}, deserialize=False)
 
     def test_get_index(self):
         with mock.patch.object(self.client, '_req') as rmock:
@@ -259,7 +259,7 @@ class TestElasticsearchClient(unittest.TestCase):
             self.client.bulk_with_instruction(instruction, terms)
             rmock.assert_called_once_with(
                 self.client._sess.post,
-                'http://elasticsearch:9200/index_name/test_mapping/_bulk',
+                'http://elasticsearch:9200/index_name/_bulk',
                 expected_data, None, deserialize=False)
 
     def test_bulk_index(self):

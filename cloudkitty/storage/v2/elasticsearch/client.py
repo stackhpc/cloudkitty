@@ -158,12 +158,9 @@ class ElasticsearchClient(object):
         :rtype: requests.models.Response
         """
         url = '/'.join(
-            (self._url, self._index_name, '_mapping', self._mapping_name))
-        # NOTE(peschk_l): This is done for compatibility with
-        # Elasticsearch 6 and 7.
-        param = {"include_type_name": "true"}
+            (self._url, self._index_name, self._mapping_name))
         return self._req(
-            self._sess.put, url, json.dumps(mapping), param, deserialize=False)
+            self._sess.post, url, json.dumps(mapping), {}, deserialize=False)
 
     def get_index(self):
         """Does a GET request against ES's index API.
@@ -228,7 +225,7 @@ class ElasticsearchClient(object):
         """Does a POST request against ES's bulk API
 
         The POST request will be done against
-        `/<index_name>/<mapping_name>/_bulk`
+        `/<index_name>/_bulk`
 
         The instruction will be appended before each term. For example,
         bulk_with_instruction('instr', ['one', 'two']) will produce::
@@ -249,7 +246,7 @@ class ElasticsearchClient(object):
             *[(instruction, json.dumps(term)) for term in terms]
         )) + '\n'
         url = '/'.join(
-            (self._url, self._index_name, self._mapping_name, '_bulk'))
+            (self._url, self._index_name, '_bulk'))
         return self._req(self._sess.post, url, data, None, deserialize=False)
 
     def bulk_index(self, terms):
