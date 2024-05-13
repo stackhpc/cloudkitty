@@ -148,7 +148,9 @@ class PrometheusCollector(collector.BaseCollector):
                 self.conf[metric_name]['factor'],
                 self.conf[metric_name]['offset'],
             )
-            qty = ck_utils.mutate(qty, self.conf[metric_name]['mutate'])
+            mutate_map = self.conf[metric_name].get('mutate_map')
+            qty = ck_utils.mutate(qty, self.conf[metric_name]['mutate'],
+                                  mutate_map=mutate_map)
 
         return metadata, groupby, qty
 
@@ -210,6 +212,8 @@ class PrometheusCollector(collector.BaseCollector):
         # Add custom query suffix
         if query_suffix:
             query = "{0} {1}".format(query, query_suffix)
+
+        LOG.debug("Calling Prometheus with query: %s", query)
 
         try:
             res = self._conn.get_instant(
