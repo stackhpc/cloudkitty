@@ -323,11 +323,11 @@ function install_elasticsearch_fedora {
     sudo yum localinstall -y ${opensearch_file}
 }
 
-function install_elasticsearch {
+function install_opensearch {
     if is_ubuntu; then
-        install_elasticsearch_ubuntu
+        install_opensearch_ubuntu
     elif is_fedora; then
-        install_elasticsearch_fedora
+        install_opensearch_fedora
     else
         die $LINENO "Distribution must be Debian or Fedora-based"
     fi
