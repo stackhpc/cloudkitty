@@ -1353,6 +1353,14 @@
 # Elasticsearch index to use. Defaults to "cloudkitty". (string value)
 #index_name = cloudkitty
 
+# Elasticsearch template name to use. Defaults to
+# "cloudkitty_mapping". (string value)
+#template_name = cloudkitty_mapping
+
+# List of Elasticsearch component template names to include in the
+# index template.  (list value)
+#component_templates =
+
 # Set to true to allow insecure HTTPS connections to Elasticsearch
 # (boolean value)
 #insecure = false
