@@ -178,6 +178,11 @@ function configure_cloudkitty {
         iniset $CLOUDKITTY_CONF storage_${CLOUDKITTY_STORAGE_BACKEND} index_name ${CLOUDKITTY_ELASTICSEARCH_INDEX}
     fi
 
+    if [ "$CLOUDKITTY_STORAGE_BACKEND" == "opensearch" ]; then
+        iniset $CLOUDKITTY_CONF storage_${CLOUDKITTY_STORAGE_BACKEND} host ${CLOUDKITTY_OPENSEARCH_HOST}
+        iniset $CLOUDKITTY_CONF storage_${CLOUDKITTY_STORAGE_BACKEND} index_name ${CLOUDKITTY_OPENSEARCH_INDEX}
+    fi
+
     # collect
     iniset $CLOUDKITTY_CONF collect collector $CLOUDKITTY_COLLECTOR
     iniset $CLOUDKITTY_CONF "collector_${CLOUDKITTY_COLLECTOR}" auth_section authinfos
@@ -248,6 +253,12 @@ function create_elasticsearch_index {
     fi
 }
 
+function create_opensearch_index {
+    if [ "$CLOUDKITTY_STORAGE_BACKEND" == "opensearch" ]; then
+        curl -XPUT "${CLOUDKITTY_OPENSEARCH_HOST}/${CLOUDKITTY_OPENSEARCH_INDEX}"
+    fi
+}
+
 # init_cloudkitty() - Initialize CloudKitty database
 function init_cloudkitty {
     # Delete existing cache
@@ -265,6 +276,7 @@ function init_cloudkitty {
 
     create_influxdb_database
     create_elasticsearch_index
+    create_opensearch_index
 
     # Migrate cloudkitty database
     $CLOUDKITTY_BIN_DIR/cloudkitty-dbsync upgrade
@@ -301,13 +313,38 @@ function install_influx {
     sudo systemctl start influxdb || sudo systemctl restart influxdb
 }
 
+function install_elasticsearch_ubuntu {
+    local opensearch_file=$(get_extra_file https://artifacts.opensearch.org/releases/bundle/opensearch/1.3.9/opensearch-1.3.9-linux-x64.deb)
+    sudo dpkg -i --skip-same-version ${opensearch_file}
+}
+
+function install_elasticsearch_fedora {
+    local opensearch_file=$(get_extra_file https://artifacts.opensearch.org/releases/bundle/opensearch/1.3.9/opensearch-1.3.9-linux-x64.rpm)
+    sudo yum localinstall -y ${opensearch_file}
+}
+
+function install_opensearch {
+    if is_ubuntu; then
+        install_opensearch_ubuntu
+    elif is_fedora; then
+        install_opensearch_fedora
+    else
+        die $LINENO "Distribution must be Debian or Fedora-based"
+    fi
+    if ! sudo grep plugins.security.disabled /etc/opensearch/opensearch.yml >/dev/null; then
+        echo "plugins.security.disabled: true" | sudo tee -a /etc/opensearch/opensearch.yml >/dev/null
+    fi
+    sudo systemctl enable opensearch
+    sudo systemctl start opensearch || sudo systemctl restart opensearch
+}
+
 function install_opensearch_ubuntu {
-    local opensearch_file=$(get_extra_file https://artifacts.opensearch.org/releases/bundle/opensearch/2.5.0/opensearch-2.5.0-linux-x64.deb)
+    local opensearch_file=$(get_extra_file https://artifacts.opensearch.org/releases/bundle/opensearch/2.11.0/opensearch-2.11.0-linux-x64.deb)
     sudo dpkg -i --skip-same-version ${opensearch_file}
 }
 
 function install_opensearch_fedora {
-    local opensearch_file=$(get_extra_file https://artifacts.opensearch.org/releases/bundle/opensearch/2.5.0/opensearch-2.5.0-linux-x64.rpm)
+    local opensearch_file=$(get_extra_file https://artifacts.opensearch.org/releases/bundle/opensearch/2.11.0/opensearch-2.11.0-linux-x64.rpm)
     sudo yum localinstall -y ${opensearch_file}
 }
 
@@ -335,6 +372,8 @@ function install_cloudkitty {
         install_influx
     elif [ $CLOUDKITTY_STORAGE_BACKEND == 'elasticsearch' ]; then
         install_elasticsearch
+    elif [ $CLOUDKITTY_STORAGE_BACKEND == 'opensearch' ]; then
+        install_opensearch
     fi
 }
 
