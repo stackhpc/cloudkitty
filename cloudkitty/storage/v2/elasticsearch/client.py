@@ -98,14 +98,14 @@ class ElasticsearchClient(object):
         sources = []
         for elem in groupby:
             if elem == 'type':
-                sources.append({'type': {'terms': {'field': 'type.keyword'}}})
+                sources.append({'type': {'terms': {'field': 'type'}}})
             elif elem == 'time':
                 # Not doing a date_histogram aggregation because we don't know
                 # the period
                 sources.append({'begin': {'terms': {'field': 'start'}}})
                 sources.append({'end': {'terms': {'field': 'end'}}})
             else:
-                field = 'groupby.' + elem + '.keyword'
+                field = 'groupby.' + elem
                 sources.append({elem: {'terms': {'field': field}}})
 
         return {"sources": sources}
