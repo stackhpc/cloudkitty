@@ -414,4 +414,98 @@ class StorageUnitTest(TestCase):
             self.assertIsNone(out)
 
 
+class StorageBoundsTest(TestCase):
+
+    storage_scenarios = [
+        ('influxdb', dict(storage_backend='influxdb')),
+        ('elasticsearch', dict(storage_backend='elasticsearch')),
+        ('opensearch', dict(storage_backend='opensearch'))]
+
+    @classmethod
+    def generate_scenarios(cls):
+        cls.scenarios = testscenarios.multiply_scenarios(
+            cls.scenarios,
+            cls.storage_scenarios)
+
+    @mock.patch(_ES_CLIENT_PATH,
+                new=es_utils.FakeElasticsearchClient)
+    @mock.patch(_INFLUX_CLIENT_PATH,
+                new=influx_utils.FakeInfluxClient)
+    @mock.patch(_OS_CLIENT_PATH,
+                new=opensearch_utils.FakeOpenSearchClient)
+    @mock.patch('cloudkitty.utils.load_conf', new=test_utils.load_conf)
+    def setUp(self):
+        super(StorageBoundsTest, self).setUp()
+        self.conf.set_override('backend', self.storage_backend, 'storage')
+        self.conf.set_override('version', '2', 'storage')
+        self.storage = storage.get_storage(conf=test_utils.load_conf())
+        self.storage.init()
+
+    def test_get_bounds_empty_backend(self):
+        self.assertEqual(
+            {'begin': None, 'end': None},
+            self.storage.get_bounds(),
+        )
+
+    def test_get_bounds_after_multiple_pushes(self):
+        start_base = tzutils.utc_to_local(datetime.datetime(2024, 1, 1))
+        expected_begin = None
+        expected_end = None
+
+        for hours in (0, 1, 3):
+            start = tzutils.add_delta(
+                start_base,
+                datetime.timedelta(hours=hours),
+            )
+            end = tzutils.add_delta(start, datetime.timedelta(hours=1))
+            data = test_utils.generate_v2_storage_data(
+                project_ids=['project-a'],
+                start=start,
+                end=end,
+            )
+            self.storage.push([data])
+            expected_begin = start if expected_begin is None else min(
+                expected_begin, start)
+            expected_end = end if expected_end is None else max(
+                expected_end, end)
+
+        self.assertEqual(
+            {'begin': expected_begin, 'end': expected_end},
+            self.storage.get_bounds(),
+        )
+
+    def test_get_bounds_reflects_full_range_across_scopes_and_types(self):
+        first_start = tzutils.utc_to_local(datetime.datetime(2024, 2, 1))
+        first_end = tzutils.add_delta(first_start, datetime.timedelta(hours=1))
+        second_start = tzutils.add_delta(
+            first_start,
+            datetime.timedelta(hours=4),
+        )
+        second_end = tzutils.add_delta(
+            second_start,
+            datetime.timedelta(hours=1),
+        )
+
+        self.storage.push([
+            test_utils.generate_v2_storage_data(
+                project_ids=['project-a', 'project-b'],
+                start=first_start,
+                end=first_end,
+            ),
+        ])
+        self.storage.push([
+            test_utils.generate_v2_storage_data(
+                project_ids=['project-c'],
+                start=second_start,
+                end=second_end,
+            ),
+        ])
+
+        self.assertEqual(
+            {'begin': first_start, 'end': second_end},
+            self.storage.get_bounds(),
+        )
+
+
 StorageUnitTest.generate_scenarios()
+StorageBoundsTest.generate_scenarios()

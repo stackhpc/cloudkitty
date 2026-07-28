@@ -104,6 +104,13 @@ class BaseStorage(object, metaclass=abc.ABCMeta):
         """
 
     @abc.abstractmethod
+    def get_bounds(self):
+        """Returns the global time bounds stored in the backend.
+
+        :rtype: dict
+        """
+
+    @abc.abstractmethod
     def total(self, groupby=None, begin=None, end=None, metric_types=None,
               filters=None, custom_fields=None, offset=0, limit=1000,
               paginate=True):
