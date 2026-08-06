@@ -13,12 +13,15 @@
 #    under the License.
 #
 import copy
+import datetime
 import functools
 
 from influxdb import resultset
 
 from cloudkitty.storage.v2.influx import _sanitized_groupby
 from cloudkitty.storage.v2.influx import InfluxClient
+from cloudkitty.storage.v2.influx import PERIOD_FIELD_NAME
+from cloudkitty.utils import tz as tzutils
 
 
 class FakeInfluxClient(InfluxClient):
@@ -142,6 +145,23 @@ class FakeInfluxClient(InfluxClient):
         output['series'] = [series]
 
         return len(list(points)), resultset.ResultSet(output)
+
+    def get_bounds(self):
+        if not self._points:
+            return {'begin': None, 'end': None}
+
+        points = sorted(self._points, key=lambda point: point['time'])
+        begin = points[0]['time']
+        period = (points[-1]['fields'].get(PERIOD_FIELD_NAME)
+                  or self._default_period)
+        end = points[-1]['time']
+        return {
+            'begin': begin,
+            'end': tzutils.add_delta(
+                end,
+                datetime.timedelta(seconds=period),
+            ),
+        }
 
     def delete(self, begin, end, filters):
 

@@ -191,6 +191,13 @@ class V1StorageAdapter(storage_v2.BaseStorage):
     def delete(self, begin=None, end=None, filters=None):
         LOG.warning('Calling unsupported "delete" method on v1 storage.')
 
+    def get_bounds(self):
+        LOG.warning('Calling unsupported "get_bounds" method on v1 storage.')
+        return {
+            'begin': None,
+            'end': None,
+        }
+
 
 def get_storage(**kwargs):
     storage_args = {

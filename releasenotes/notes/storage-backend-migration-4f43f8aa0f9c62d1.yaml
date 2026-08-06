@@ -1,0 +1,10 @@
+---
+features:
+  - |
+    Added the ``cloudkitty-storage-migrate`` command for offline migration
+    between different v2 storage backends. The active ``[storage] backend`` is
+    used as the destination and ``--migrate-from`` selects the source. The
+    command supports automatic or explicit time bounds, paginated copying,
+    destination overwrite by explicit request, and post-copy verification of
+    counts and totals. Connection details for both storage drivers must be
+    present in the CloudKitty configuration used by the command.

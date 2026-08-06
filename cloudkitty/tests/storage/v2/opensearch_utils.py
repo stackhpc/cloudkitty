@@ -57,12 +57,13 @@ class FakeOpenSearchClient(client.OpenSearchClient):
                  offset=0, limit=1000, paginate=True):
         filter_func = functools.partial(
             self.__filter_func, begin, end, filters, metric_types)
-        output = list(filter(filter_func, self._docs))[offset:offset+limit]
+        filtered = list(filter(filter_func, self._docs))
+        output = copy.deepcopy(filtered[offset:offset+limit])
         for doc in output:
             doc["start"] = doc["start"].isoformat()
             doc["end"] = doc["end"].isoformat()
             doc["_source"] = copy.deepcopy(doc)
-        return len(output), output
+        return len(filtered), output
 
     def total(self, begin, end, metric_types, filters, groupby,
               custom_fields=None, offset=0, limit=1000, paginate=True):
@@ -92,6 +93,14 @@ class FakeOpenSearchClient(client.OpenSearchClient):
                 'key': dict(zip(groupby, groups)),
             })
         return len(output), output[offset:offset+limit]
+
+    def delete_by_query(self, begin=None, end=None, filters=None):
+        filter_func = functools.partial(
+            self.__filter_func, begin, end, filters, None)
+        self._docs = [
+            doc for doc in self._docs
+            if not filter_func(doc)
+        ]
 
     def _req(self, method, url, data, params, deserialize=True):
         pass

@@ -289,6 +289,33 @@ class InfluxClient(object):
         total = sum(point['count'] for point in total.get_points())
         return total, result
 
+    def get_bounds(self):
+        first_query = ('SELECT * FROM "dataframes" '
+                       'ORDER BY time ASC LIMIT 1;')
+        last_query = ('SELECT "{}" FROM "dataframes" '
+                      'ORDER BY time DESC LIMIT 1;').format(
+                          PERIOD_FIELD_NAME)
+        first, last = self._conn.query(first_query + last_query)
+
+        first_points = list(first.get_points())
+        if not first_points:
+            return {'begin': None, 'end': None}
+
+        first_point = first_points[0]
+        last_points = list(last.get_points())
+        last_point = last_points[0] if last_points else first_point
+
+        begin = tzutils.dt_from_iso(first_point['time'])
+        period = last_point.get(PERIOD_FIELD_NAME) or self._default_period
+        end = tzutils.add_delta(
+            tzutils.dt_from_iso(last_point['time']),
+            datetime.timedelta(seconds=period),
+        )
+        return {
+            'begin': begin,
+            'end': end,
+        }
+
     @staticmethod
     def _get_time_query_delete(begin, end):
         output = ""
@@ -743,6 +770,30 @@ class InfluxClientV2(InfluxClient):
 
         return self.query(query)
 
+    def get_bounds(self):
+        query = f'''
+        from(bucket:"{CONF.storage_influxdb.bucket}")
+            |> filter(fn: (r) => r["_measurement"] == "dataframes")
+            |> keep(columns: ["_time", "{PERIOD_FIELD_NAME}"])
+            |> sort(columns: ["_time"])
+        '''
+        response = self.query(query)
+        if not response:
+            return {'begin': None, 'end': None}
+
+        first = response[0]
+        last = response[-1]
+        begin = tzutils.dt_from_iso(first['_time'])
+        period = int(last.get(PERIOD_FIELD_NAME) or self._default_period)
+        end = tzutils.add_delta(
+            tzutils.dt_from_iso(last['_time']),
+            datetime.timedelta(seconds=period),
+        )
+        return {
+            'begin': begin,
+            'end': end,
+        }
+
 
 class InfluxStorage(v2_storage.BaseStorage):
 
@@ -833,7 +884,12 @@ class InfluxStorage(v2_storage.BaseStorage):
         }
 
     def delete(self, begin=None, end=None, filters=None):
+        begin = tzutils.local_to_utc(begin) if begin else None
+        end = tzutils.local_to_utc(end) if end else None
         self._conn.delete(begin, end, filters)
+
+    def get_bounds(self):
+        return self._conn.get_bounds()
 
     def total(self, groupby=None, begin=None, end=None, metric_types=None,
               filters=None, offset=0, limit=1000, paginate=True,

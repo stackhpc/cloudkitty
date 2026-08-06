@@ -165,6 +165,25 @@ class OpenSearchStorage(v2_storage.BaseStorage):
     def delete(self, begin=None, end=None, filters=None):
         self._conn.delete_by_query(begin, end, filters)
 
+    def get_bounds(self):
+        total, docs = self._conn.retrieve(
+            None, None, None, None, paginate=False)
+        if not total:
+            return {'begin': None, 'end': None}
+
+        starts = [
+            tzutils.dt_from_iso(doc['_source']['start'])
+            for doc in docs
+        ]
+        ends = [
+            tzutils.dt_from_iso(doc['_source']['end'])
+            for doc in docs
+        ]
+        return {
+            'begin': min(starts),
+            'end': max(ends),
+        }
+
     @staticmethod
     def _normalize_time(t):
         if isinstance(t, datetime.datetime):

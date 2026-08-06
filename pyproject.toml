@@ -35,6 +35,7 @@ Repository = "https://opendev.org/openstack/cloudkitty/"
 cloudkitty-dbsync = "cloudkitty.cli.dbsync:main"
 cloudkitty-processor = "cloudkitty.cli.processor:main"
 cloudkitty-storage-init = "cloudkitty.cli.storage:main"
+cloudkitty-storage-migrate = "cloudkitty.cli.storage_migrate:main"
 cloudkitty-status = "cloudkitty.cli.status:main"
 
 [project.entry-points."oslo.policy.enforcer"]
