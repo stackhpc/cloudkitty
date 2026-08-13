@@ -38,14 +38,13 @@ class OpenSearchClient(object):
     :type scroll_duration: int
     """
 
-    def __init__(self, url, index_name, mapping_name,
+    def __init__(self, url, index_name,
                  verify=True,
                  autocommit=True,
                  chunk_size=5000,
                  scroll_duration=60):
         self._url = url.strip('/')
         self._index_name = index_name.strip('/')
-        self._mapping_name = mapping_name.strip('/')
         self._autocommit = autocommit
         self._chunk_size = chunk_size
         self._scroll_duration = str(scroll_duration) + 's'
@@ -103,14 +102,14 @@ class OpenSearchClient(object):
         sources = []
         for elem in groupby:
             if elem == 'type':
-                sources.append({'type': {'terms': {'field': 'type.keyword'}}})
+                sources.append({'type': {'terms': {'field': 'type'}}})
             elif elem == 'time':
                 # Not doing a date_histogram aggregation because we don't know
                 # the period
                 sources.append({'begin': {'terms': {'field': 'start'}}})
                 sources.append({'end': {'terms': {'field': 'end'}}})
             else:
-                field = 'groupby.' + elem + '.keyword'
+                field = 'groupby.' + elem
                 sources.append({elem: {'terms': {'field': field}}})
 
         return {"sources": sources}
@@ -157,14 +156,13 @@ class OpenSearchClient(object):
         """Does a POST request against OpenSearch's mapping API.
 
         The POST request will be done against
-        `/<index_name>/<mapping_name>`
+        `/<index_name>/_mapping`
 
         :mapping: body of the request
         :type mapping: dict
         :rtype: requests.models.Response
         """
-        url = '/'.join(
-            (self._url, self._index_name, self._mapping_name))
+        url = '/'.join((self._url, self._index_name, '_mapping'))
         return self._req(
             self._sess.post, url, json.dumps(mapping), {}, deserialize=False)
 

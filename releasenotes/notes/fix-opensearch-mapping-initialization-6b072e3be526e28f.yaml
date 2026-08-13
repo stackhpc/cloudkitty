@@ -1,0 +1,7 @@
+---
+fixes:
+  - |
+    Fixed OpenSearch storage initialization to apply the CloudKitty index
+    mapping through the mapping API instead of indexing it as a document.
+    Grouped aggregations now use the keyword fields defined by that mapping
+    directly.

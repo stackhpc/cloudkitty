@@ -31,7 +31,6 @@ class TestOpenSearchClient(unittest.TestCase):
         self.client = client.OpenSearchClient(
             'http://opensearch:9200',
             'index_name',
-            'test_mapping',
             autocommit=False)
 
     def test_build_must_no_params(self):
@@ -93,9 +92,9 @@ class TestOpenSearchClient(unittest.TestCase):
         self.assertEqual(
             self.client._build_composite(['one', 'type', 'two']),
             {'sources': [
-                {'one': {'terms': {'field': 'groupby.one.keyword'}}},
-                {'type': {'terms': {'field': 'type.keyword'}}},
-                {'two': {'terms': {'field': 'groupby.two.keyword'}}},
+                {'one': {'terms': {'field': 'groupby.one'}}},
+                {'type': {'terms': {'field': 'type'}}},
+                {'two': {'terms': {'field': 'groupby.two'}}},
             ]},
         )
 
@@ -194,7 +193,7 @@ class TestOpenSearchClient(unittest.TestCase):
             self.client.post_mapping(mapping)
             rmock.assert_called_once_with(
                 self.client._sess.post,
-                'http://opensearch:9200/index_name/test_mapping',
+                'http://opensearch:9200/index_name/_mapping',
                 '{"a": "b"}', {}, deserialize=False)
 
     def test_get_index(self):

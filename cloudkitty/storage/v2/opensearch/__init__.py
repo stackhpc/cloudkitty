@@ -96,7 +96,6 @@ class OpenSearchStorage(v2_storage.BaseStorage):
         self._conn = os_client.OpenSearchClient(
             CONF.storage_opensearch.host,
             CONF.storage_opensearch.index_name,
-            "_doc",
             verify=verify)
 
     def init(self):
@@ -104,7 +103,7 @@ class OpenSearchStorage(v2_storage.BaseStorage):
         if r.status_code != 200:
             raise exceptions.IndexDoesNotExist(
                 CONF.storage_opensearch.index_name)
-        LOG.info('Creating mapping "_doc" on index %s...',
+        LOG.info('Creating mapping on index %s...',
                  CONF.storage_opensearch.index_name)
         self._conn.post_mapping(CLOUDKITTY_INDEX_MAPPING)
         LOG.info('Mapping created.')
