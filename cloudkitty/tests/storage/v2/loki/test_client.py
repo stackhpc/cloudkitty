@@ -219,8 +219,14 @@ class TestLokiClient(unittest.TestCase):
         mock_response.text = "Internal Server Error"
         mock_requests.get.return_value = mock_response
         query = '{app="test"} | json'
-        data = self.client.search(query, self.begin_dt, self.end_dt, 100)
-        self.assertEqual(data, [])
+        self.assertRaises(
+            exceptions.QueryError,
+            self.client.search,
+            query,
+            self.begin_dt,
+            self.end_dt,
+            100,
+        )
         expected_msg = ("Failed to query logs or empty result: 500 - "
                         "Internal Server Error")
         mock_log.error.assert_called_once()
@@ -286,16 +292,19 @@ class TestLokiClient(unittest.TestCase):
                                                  mock_requests_arg):
         mock_search_result = {
             "stats": {"summary": {"totalEntriesReturned": 5}},
-            "result": [{"stream": {}, "values": [["ts", '{"key":"val"}']]}]
+            "result": [{"stream": {}, "values": [
+                ["1704067200000000000", '{"key":"val"}']]}]
         }
         mock_search.return_value = mock_search_result
         total, output = self.client.retrieve(self.begin_dt, self.end_dt,
                                              None, None, 100)
         expected_base_query = self.client._base_query()
         mock_search.assert_called_once_with(
-            expected_base_query, self.begin_dt, self.end_dt, 100
+            expected_base_query, 1704067200000000000,
+            1704070800000000000, 5000,
+            direction='forward',
         )
-        self.assertEqual(total, 5)
+        self.assertEqual(total, 1)
         self.assertEqual(output, mock_search_result["result"])
 
     @patch.object(client.LokiClient, 'search')
@@ -303,7 +312,8 @@ class TestLokiClient(unittest.TestCase):
             self, mock_search, mock_log, mock_requests_arg):
         mock_search_result = {
             "stats": {"summary": {"totalEntriesReturned": 2}},
-            "result": [{"stream": {}, "values": [["ts", '{"type":"t1"}']]}]
+            "result": [{"stream": {}, "values": [
+                ["1704067200000000000", '{"type":"t1"}']]}]
         }
         mock_search.return_value = mock_search_result
         filters = {"project_id": "proj1", "region": "reg1"}
@@ -321,9 +331,11 @@ class TestLokiClient(unittest.TestCase):
             f"{base_query} | {filter_query_part}, {metric_query_part}"
         )
         mock_search.assert_called_once_with(
-            expected_full_query, self.begin_dt, self.end_dt, 50
+            expected_full_query, 1704067200000000000,
+            1704070800000000000, 5000,
+            direction='forward',
         )
-        self.assertEqual(total, 2)
+        self.assertEqual(total, 1)
         self.assertEqual(output, mock_search_result["result"])
 
     @patch.object(client.LokiClient, 'search')
@@ -331,7 +343,8 @@ class TestLokiClient(unittest.TestCase):
                                             mock_requests_arg):
         mock_search.return_value = {
             "stats": {"summary": {"totalEntriesReturned": 1}},
-            "result": ["data"]
+            "result": [{"stream": {}, "values": [
+                ["1704067200000000000", '{"type":"cpu_util"}']]}]
         }
         metric_types = ["cpu_util", "ram_util"]
         self.client.retrieve(self.begin_dt, self.end_dt, None,
@@ -340,18 +353,140 @@ class TestLokiClient(unittest.TestCase):
         metric_query_part = f'type = "{metric_types[0]}"'
         expected_full_query = f"{base_query} | {metric_query_part}"
         mock_search.assert_called_once_with(
-            expected_full_query, self.begin_dt, self.end_dt, 50
+            expected_full_query, 1704067200000000000,
+            1704070800000000000, 5000,
+            direction='forward',
         )
+
+    @patch.object(client.LokiClient, 'search')
+    def test_retrieve_flattens_all_stream_values(
+            self, mock_search, mock_log, mock_requests_arg):
+        values = [
+            ['1704067200000000000', '{"key":"one"}'],
+            ['1704067201000000000', '{"key":"two"}'],
+            ['1704067202000000000', '{"key":"three"}'],
+        ]
+        mock_search.return_value = {
+            'stats': {'summary': {'totalEntriesReturned': 3}},
+            'result': [{'stream': {'service': 'cloudkitty'},
+                        'values': values}],
+        }
+
+        total, output = self.client.retrieve(
+            self.begin_dt, self.end_dt, None, None, 100,
+            paginate=False)
+
+        self.assertEqual(3, total)
+        self.assertEqual(3, len(output))
+        self.assertEqual(
+            values,
+            [value for item in output for value in item['values']],
+        )
+
+    @patch.object(client.LokiClient, 'search')
+    def test_iter_retrieve_advances_from_last_timestamp(
+            self, mock_search, mock_log, mock_requests_arg):
+        stream = {'service': 'cloudkitty'}
+        first = ['1704067200000000000', '{"key":"one"}']
+        second = ['1704067201000000000', '{"key":"two"}']
+        third = ['1704067202000000000', '{"key":"three"}']
+        mock_search.side_effect = [
+            {'stats': {'summary': {'totalEntriesReturned': 2}},
+             'result': [{'stream': stream, 'values': [first, second]}]},
+            {'stats': {'summary': {'totalEntriesReturned': 2}},
+             'result': [{'stream': stream, 'values': [second, third]}]},
+            {'stats': {'summary': {'totalEntriesReturned': 1}},
+             'result': [{'stream': stream, 'values': [third]}]},
+        ]
+
+        pages = list(self.client.iter_retrieve(
+            self.begin_dt, self.end_dt, None, None, query_limit=2))
+
+        self.assertEqual(2, len(pages))
+        self.assertEqual(
+            [first, second],
+            [item['values'][0] for item in pages[0]],
+        )
+        self.assertEqual(
+            [third],
+            [item['values'][0] for item in pages[1]],
+        )
+
+    @patch.object(client.LokiClient, 'search')
+    def test_iter_retrieve_fails_when_one_timestamp_exceeds_limit(
+            self, mock_search, mock_log, mock_requests_arg):
+        values = [
+            ['1704067200000000000', '{"key":"one"}'],
+            ['1704067200000000000', '{"key":"two"}'],
+        ]
+        mock_search.return_value = {
+            'stats': {'summary': {'totalEntriesReturned': 2}},
+            'result': [{'stream': {'service': 'cloudkitty'},
+                        'values': values}],
+        }
+        iterator = self.client.iter_retrieve(
+            self.begin_dt, self.end_dt, None, None, query_limit=2)
+
+        self.assertEqual(2, len(next(iterator)))
+        self.assertRaises(exceptions.QueryLimitExceeded, next, iterator)
+
+    @patch.object(client.LokiClient, 'iter_retrieve')
+    def test_retrieve_applies_offset_across_query_pages(
+            self, mock_iter_retrieve, mock_log, mock_requests_arg):
+        entries = [
+            {'stream': {}, 'values': [[str(timestamp), '{}']]}
+            for timestamp in range(3)
+        ]
+        mock_iter_retrieve.return_value = iter([
+            entries[:2],
+            entries[2:],
+        ])
+
+        total, output = self.client.retrieve(
+            self.begin_dt, self.end_dt, None, None, 1, offset=1)
+
+        self.assertEqual(3, total)
+        self.assertEqual([entries[1]], output)
+
+    @patch.object(client.LokiClient, '_retrieve')
+    def test_get_bounds_queries_each_shard_in_both_directions(
+            self, mock_retrieve, mock_log, mock_requests_arg):
+        begin = datetime(2024, 1, 1, tzinfo=timezone.utc)
+        middle = begin + timedelta(days=self.shard_days)
+        end = begin + timedelta(days=self.shard_days * 2)
+        entries = [
+            {'stream': {}, 'values': [[str(timestamp), '{}']]}
+            for timestamp in range(4)
+        ]
+        mock_retrieve.side_effect = [
+            (1, [entries[0]]),
+            (1, [entries[1]]),
+            (1, [entries[2]]),
+            (1, [entries[3]]),
+        ]
+
+        self.assertEqual(entries, self.client.get_bounds(begin, end))
+        mock_retrieve.assert_has_calls([
+            call(begin, middle, None, None, 1, direction='forward'),
+            call(begin, middle, None, None, 1, direction='backward'),
+            call(middle, end, None, None, 1, direction='forward'),
+            call(middle, end, None, None, 1, direction='backward'),
+        ])
 
     @patch.object(client.LokiClient, 'search')
     def test_retrieve_empty_or_malformed_search_response(
             self, mock_search, mock_loki_client_log, mock_requests_arg):
         mock_search.return_value = []
         expected_query_for_log = self.client._base_query()
-        total, output = self.client.retrieve(self.begin_dt, self.end_dt,
-                                             None, None, 100)
-        self.assertEqual(total, 0)
-        self.assertEqual(output, [])
+        self.assertRaises(
+            exceptions.QueryError,
+            self.client.retrieve,
+            self.begin_dt,
+            self.end_dt,
+            None,
+            None,
+            100,
+        )
         expected_log_message_case1 = (
             f"Data from Loki search is not in the expected dictionary format "
             f"or is missing keys. Query: '{expected_query_for_log}'. "
@@ -364,10 +499,15 @@ class TestLokiClient(unittest.TestCase):
         mock_search.reset_mock()
         mock_loki_client_log.reset_mock()
         mock_search.return_value = {"nodata": True}
-        total, output = self.client.retrieve(self.begin_dt, self.end_dt,
-                                             None, None, 100)
-        self.assertEqual(total, 0)
-        self.assertEqual(output, [])
+        self.assertRaises(
+            exceptions.QueryError,
+            self.client.retrieve,
+            self.begin_dt,
+            self.end_dt,
+            None,
+            None,
+            100,
+        )
         expected_log_message_case2 = (
             f"Data from Loki search is not in the expected dictionary format "
             f"or is missing keys. Query: '{expected_query_for_log}'. "
@@ -435,7 +575,8 @@ class TestLokiClient(unittest.TestCase):
             None, 0, 100, False
         )
         mock_retrieve.assert_called_once_with(
-            self.begin_dt, self.end_dt, None, "some_type", 100
+            self.begin_dt, self.end_dt, None, "some_type", 100,
+            paginate=False,
         )
         self.assertEqual(count, 1)
         self.assertEqual(len(result), 1)
@@ -489,7 +630,7 @@ class TestLokiClient(unittest.TestCase):
         )
         mock_retrieve.assert_called_once_with(
             self.begin_dt, self.end_dt, {"filter_key": "val"},
-            "any_metric_type", 100
+            "any_metric_type", 100, paginate=False,
         )
         self.assertEqual(count, 3)
         expected_results_map = {
@@ -528,7 +669,6 @@ class TestLokiClient(unittest.TestCase):
             "the custom fields [%s] informed by the user will be ignored.",
             custom_fields
         )
-        mock_log.warning.assert_any_call("offset is not supported by Loki.")
 
     @patch.object(client.LokiClient, '_base_query')
     def test_delete_by_query_success(self, mq, ml, mr):
@@ -615,35 +755,22 @@ class TestLokiClient(unittest.TestCase):
         )
         mock_base_query.assert_called_once_with(project_id=None)
 
-    @patch.object(client.LokiClient, '_retrieve')
-    def test_retrieve_shards_with_long_time_range(
-            self, mock_retrieve, mock_log, mock_requests_arg):
+    def test_time_ranges_shard_long_time_range(
+            self, mock_log, mock_requests_arg):
         begin_dt = datetime(2024, 1, 1, tzinfo=timezone.utc)
         end_dt = datetime(2024, 1, 15, tzinfo=timezone.utc)
-        mock_retrieve.return_value = (1, ["dummy_data"])
+        self.assertEqual([
+            (begin_dt, begin_dt + timedelta(days=self.shard_days)),
+            (begin_dt + timedelta(days=self.shard_days), end_dt),
+        ], list(self.client._time_ranges(begin_dt, end_dt)))
 
-        self.client.retrieve(begin_dt, end_dt, None, None, 100)
-
-        calls = [
-            call(begin_dt, begin_dt + timedelta(days=self.shard_days),
-                 None, None, 100),
-            call(begin_dt + timedelta(days=self.shard_days), end_dt,
-                 None, None, 100)
-        ]
-        mock_retrieve.assert_has_calls(calls)
-        self.assertEqual(mock_retrieve.call_count, 2)
-
-    @patch.object(client.LokiClient, '_retrieve')
-    def test_retrieve_no_sharding_with_short_time_range(
-            self, mock_retrieve, mock_log, mock_requests_arg):
+    def test_time_ranges_do_not_shard_short_time_range(
+            self, mock_log, mock_requests_arg):
         begin_dt = datetime(2024, 1, 1, tzinfo=timezone.utc)
         end_dt = datetime(2024, 1, 5, tzinfo=timezone.utc)
-        mock_retrieve.return_value = (1, ["dummy_data"])
-
-        self.client.retrieve(begin_dt, end_dt, None, None, 100)
-
-        mock_retrieve.assert_called_once_with(
-            begin_dt, end_dt, None, None, 100
+        self.assertEqual(
+            [(begin_dt, end_dt)],
+            list(self.client._time_ranges(begin_dt, end_dt)),
         )
 
     # --- Structured Metadata Tests ---

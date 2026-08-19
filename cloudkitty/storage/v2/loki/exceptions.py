@@ -40,3 +40,18 @@ class PushError(BaseLokiException):
             "Failed to push logs to Loki: {} - {}".format(
                 status_code, response_text)
         )
+
+
+class QueryLimitExceeded(BaseLokiException):
+    def __init__(self, limit, timestamp):
+        super(QueryLimitExceeded, self).__init__(
+            "At least {} records share Loki timestamp {}. The complete "
+            "result cannot be retrieved safely.".format(limit, timestamp)
+        )
+
+
+class QueryError(BaseLokiException):
+    def __init__(self, response):
+        super(QueryError, self).__init__(
+            "Failed to query Loki: {}".format(response)
+        )

@@ -21,6 +21,7 @@ from cloudkitty.cli import storage_migrate
 from cloudkitty import storage
 from cloudkitty.tests.storage.v2 import es_utils
 from cloudkitty.tests.storage.v2 import influx_utils
+from cloudkitty.tests.storage.v2 import loki_utils
 from cloudkitty.tests.storage.v2 import opensearch_utils
 from cloudkitty.tests import TestCase
 from cloudkitty.tests import utils as test_utils
@@ -30,6 +31,7 @@ from cloudkitty.utils import tz as tzutils
 _ES_CLIENT_PATH = ('cloudkitty.storage.v2.elasticsearch'
                    '.client.ElasticsearchClient')
 _INFLUX_CLIENT_PATH = 'cloudkitty.storage.v2.influx.InfluxClient'
+_LOKI_CLIENT_PATH = 'cloudkitty.storage.v2.loki.client.LokiClient'
 _OS_CLIENT_PATH = ('cloudkitty.storage.v2.opensearch'
                    '.client.OpenSearchClient')
 
@@ -44,6 +46,14 @@ class StorageMigrationFlowTest(TestCase):
             source_backend='influxdb',
             destination_backend='elasticsearch',
         )),
+        ('influxdb_to_loki', dict(
+            source_backend='influxdb',
+            destination_backend='loki',
+        )),
+        ('loki_to_opensearch', dict(
+            source_backend='loki',
+            destination_backend='opensearch',
+        )),
     ]
 
     @classmethod
@@ -57,6 +67,8 @@ class StorageMigrationFlowTest(TestCase):
                 new=es_utils.FakeElasticsearchClient)
     @mock.patch(_INFLUX_CLIENT_PATH,
                 new=influx_utils.FakeInfluxClient)
+    @mock.patch(_LOKI_CLIENT_PATH,
+                new=loki_utils.FakeLokiClient)
     @mock.patch(_OS_CLIENT_PATH,
                 new=opensearch_utils.FakeOpenSearchClient)
     @mock.patch('cloudkitty.utils.load_conf', new=test_utils.load_conf)

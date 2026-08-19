@@ -25,6 +25,13 @@ configuration similar to:
    index_name = cloudkitty
    # Other required OpenSearch connection options
 
+Loki can be used as either the source or destination. Automatic bound
+discovery for a Loki source searches the period configured by
+``[storage] retention_period``. Specify both ``--begin`` and ``--end`` when
+migrating Loki records older than that period. The migration stops with an
+error rather than copy incomplete data when 5000 or more Loki records share an
+identical timestamp.
+
 Stop all services that write rated data, such as every
 :program:`cloudkitty-processor` instance, before changing the active backend.
 Ensure that the destination backend is provisioned before running the

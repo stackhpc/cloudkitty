@@ -136,6 +136,7 @@ class LokiStorage(v2_storage.BaseStorage):
             for type_, point in frame.iterpoints():
                 start, end = self._local_to_utc(frame.start, frame.end)
                 self._conn.add_point(point, type_, start, end)
+        self._conn.push()
 
     @staticmethod
     def _local_to_utc(*args):
@@ -154,20 +155,21 @@ class LokiStorage(v2_storage.BaseStorage):
     def _build_dataframes(self, logs):
         dataframes = {}
         for log in logs:
-            try:
-                labels = json.loads(log['values'][0][1])
-            except json.JSONDecodeError:
-                # In case that we have non-json compliant log lines in Loki
-                LOG.error(f"Failed to decode log line: {log['values'][0][1]}, "
-                          f"ignoring.")
-                continue
-            start = tzutils.dt_from_iso(labels['start'])
-            end = tzutils.dt_from_iso(labels['end'])
-            key = (start, end)
-            if key not in dataframes.keys():
-                dataframes[key] = dataframe.DataFrame(start=start, end=end)
-            dataframes[key].add_point(
-                self._log_to_datapoint(labels), labels['type'])
+            for value in log.get('values', []):
+                try:
+                    labels = json.loads(value[1])
+                except json.JSONDecodeError:
+                    LOG.error(
+                        "Failed to decode log line: %s, ignoring.", value[1])
+                    continue
+                start = tzutils.dt_from_iso(labels['start'])
+                end = tzutils.dt_from_iso(labels['end'])
+                key = (start, end)
+                if key not in dataframes.keys():
+                    dataframes[key] = dataframe.DataFrame(
+                        start=start, end=end)
+                dataframes[key].add_point(
+                    self._log_to_datapoint(labels), labels['type'])
 
         output = list(dataframes.values())
         output.sort(key=lambda frame: (frame.start, frame.end))
@@ -184,15 +186,54 @@ class LokiStorage(v2_storage.BaseStorage):
         begin, end = self._local_to_utc(begin or tzutils.get_month_start(),
                                         end or tzutils.get_next_month())
         total, logs = self._conn.retrieve(
-            begin, end, filters, metric_types, limit)
+            begin, end, filters, metric_types, limit,
+            offset=offset, paginate=paginate)
         dataframes = self._build_dataframes(logs)
         return {
             'total': total,
             'dataframes': dataframes
         }
 
+    def iter_dataframes(self, begin, end, page_size):
+        begin, end = self._local_to_utc(begin, end)
+        pending = []
+        for logs in self._conn.iter_retrieve(
+                begin, end, None, None):
+            pending += logs
+            while len(pending) >= page_size:
+                yield self._build_dataframes(pending[:page_size])
+                pending = pending[page_size:]
+        if pending:
+            yield self._build_dataframes(pending)
+
     def delete(self, begin=None, end=None, filters=None):
         self._conn.delete(begin, end, filters)
+
+    def get_bounds(self):
+        end = tzutils.local_to_utc(tzutils.localized_now())
+        begin = tzutils.substract_delta(end, self.get_retention())
+        logs = self._conn.get_bounds(begin, end)
+        if not logs:
+            return {'begin': None, 'end': None}
+
+        starts = []
+        ends = []
+        for log in logs:
+            for value in log.get('values', []):
+                try:
+                    labels = json.loads(value[1])
+                except json.JSONDecodeError:
+                    LOG.error(
+                        "Failed to decode log line: %s, ignoring.", value[1])
+                    continue
+                starts.append(tzutils.dt_from_iso(labels['start']))
+                ends.append(tzutils.dt_from_iso(labels['end']))
+        if not starts:
+            return {'begin': None, 'end': None}
+        return {
+            'begin': min(starts),
+            'end': max(ends),
+        }
 
     @staticmethod
     def _normalize_time(t):
@@ -225,7 +266,7 @@ class LokiStorage(v2_storage.BaseStorage):
         total, docs = self._conn.total(begin, end, metric_types, filters,
                                        groupby, custom_fields=custom_fields,
                                        offset=offset, limit=limit,
-                                       paginate=False)
+                                       paginate=paginate)
         results = [
             self._doc_to_total_result(doc, begin, end) for doc in docs
         ]

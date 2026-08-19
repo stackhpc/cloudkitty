@@ -19,7 +19,6 @@ import testscenarios
 from werkzeug import exceptions as http_exceptions
 
 from cloudkitty import storage
-
 from cloudkitty.tests import samples
 from cloudkitty.tests.storage.v2 import es_utils
 from cloudkitty.tests.storage.v2 import influx_utils
@@ -426,7 +425,8 @@ class StorageBoundsTest(TestCase):
     storage_scenarios = [
         ('influxdb', dict(storage_backend='influxdb')),
         ('elasticsearch', dict(storage_backend='elasticsearch')),
-        ('opensearch', dict(storage_backend='opensearch'))]
+        ('opensearch', dict(storage_backend='opensearch')),
+        ('loki', dict(storage_backend='loki'))]
 
     @classmethod
     def generate_scenarios(cls):
@@ -440,6 +440,8 @@ class StorageBoundsTest(TestCase):
                 new=influx_utils.FakeInfluxClient)
     @mock.patch(_OS_CLIENT_PATH,
                 new=opensearch_utils.FakeOpenSearchClient)
+    @mock.patch(_LOKI_CLIENT_PATH,
+                new=loki_utils.FakeLokiClient)
     @mock.patch('cloudkitty.utils.load_conf', new=test_utils.load_conf)
     def setUp(self):
         super(StorageBoundsTest, self).setUp()
@@ -557,3 +559,21 @@ class LokiStorageLimitTest(TestCase):
         # This should not raise an exception
         result = self.storage.total(limit=5000)
         self.assertIsNotNone(result)
+
+    def test_push_flushes_buffered_points(self):
+        point = mock.Mock()
+        point.unit = 'instance'
+        point.description = 'instance'
+        point.qty = 1
+        point.price = 1
+        point.groupby = {'project_id': 'project-a'}
+        point.metadata = {}
+        frame = mock.Mock()
+        frame.start = datetime.datetime(2024, 1, 1)
+        frame.end = datetime.datetime(2024, 1, 1, 1)
+        frame.iterpoints.return_value = [('instance', point)]
+
+        with mock.patch.object(self.storage._conn, 'push') as push_mock:
+            self.storage.push([frame])
+
+        push_mock.assert_called_once_with()

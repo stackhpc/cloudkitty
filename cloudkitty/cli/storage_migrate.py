@@ -97,27 +97,10 @@ def overwrite_destination(destination_storage, begin, end):
 def copy_dataframes(source_storage, destination_storage, begin, end,
                     page_size=1000):
     copied = 0
-    offset = 0
-
-    while True:
-        frames = source_storage.retrieve(
-            begin=begin,
-            end=end,
-            offset=offset,
-            limit=page_size,
-        )
-        dataframes = frames['dataframes']
-        if not dataframes:
-            break
-
+    for dataframes in source_storage.iter_dataframes(
+            begin, end, page_size):
         destination_storage.push(dataframes)
-
-        copied_in_page = _count_measures(dataframes)
-        copied += copied_in_page
-        offset += copied_in_page
-
-        if copied >= frames['total']:
-            break
+        copied += _count_measures(dataframes)
 
     return copied
 
@@ -256,7 +239,6 @@ class StorageMigrationCommand(object):
             raise StorageMigrationError(
                 'Unable to load source backend %s.' % self.migrate_from
             ) from exc
-
         try:
             destination_storage = storage.get_storage(version=version)
         except Exception as exc:
@@ -264,7 +246,6 @@ class StorageMigrationCommand(object):
                 'Unable to load destination backend %s.'
                 % destination_backend
             ) from exc
-
         bounds = resolve_bounds(
             source_storage,
             begin=self.begin,
@@ -274,6 +255,10 @@ class StorageMigrationCommand(object):
             LOG.info('Source backend %s is empty. Nothing to migrate.',
                      self.migrate_from)
             return
+        if bounds['begin'] >= bounds['end']:
+            raise StorageMigrationError(
+                'Migration begin bound must be earlier than end bound.'
+            )
 
         if self.overwrite_destination:
             LOG.info(

@@ -91,6 +91,31 @@ class BaseStorage(object, metaclass=abc.ABCMeta):
         :rtype: dict
        """
 
+    def iter_dataframes(self, begin, end, page_size):
+        """Iterate over all dataframes in bounded pages."""
+        copied = 0
+        offset = 0
+
+        while True:
+            frames = self.retrieve(
+                begin=begin,
+                end=end,
+                offset=offset,
+                limit=page_size,
+            )
+            dataframes = frames['dataframes']
+            if not dataframes:
+                break
+
+            yield dataframes
+
+            copied_in_page = sum(
+                len(list(frame.iterpoints())) for frame in dataframes)
+            copied += copied_in_page
+            offset += copied_in_page
+            if copied >= frames['total']:
+                break
+
     @abc.abstractmethod
     def delete(self, begin=None, end=None, filters=None):
         """Deletes all data from for the given period and filters.

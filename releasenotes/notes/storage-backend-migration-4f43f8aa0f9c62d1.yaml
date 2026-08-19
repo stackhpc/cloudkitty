@@ -8,3 +8,7 @@ features:
     destination overwrite by explicit request, and post-copy verification of
     counts and totals. Connection details for both storage drivers must be
     present in the CloudKitty configuration used by the command.
+    Loki is supported as both a source and destination, including complete
+    time-sharded retrieval, offset pagination, bounds discovery over the
+    configured retention period, and count and total verification. A Loki
+    source migration fails safely if 5000 or more records share one timestamp.

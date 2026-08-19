@@ -12,6 +12,7 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 #
+from collections import Counter
 import datetime
 
 from oslo_log import log
@@ -25,6 +26,8 @@ LOG = log.getLogger(__name__)
 
 class LokiClient(object):
     """Class used to ease interaction with Loki."""
+
+    MAX_QUERY_LIMIT = 5000
 
     # Fields stored as structured metadata for indexed querying (Loki 3.0+)
     INDEXED_FIELDS = {'type', 'user', 'unit', 'flavor_name'}
@@ -181,7 +184,13 @@ class LokiClient(object):
 
         return query
 
-    def search(self, query, begin, end, limit):
+    @staticmethod
+    def _timestamp_ns(value):
+        if isinstance(value, int):
+            return value
+        return int(value.timestamp() * 1_000_000_000)
+
+    def search(self, query, begin, end, limit, direction=None):
         url = f"{self._base_url}/query_range"
 
         if query is None:
@@ -189,10 +198,12 @@ class LokiClient(object):
 
         params = {
             "query": query,
-            "start": int(begin.timestamp() * 1_000_000_000),
-            "end": int(end.timestamp() * 1_000_000_000),
+            "start": self._timestamp_ns(begin),
+            "end": self._timestamp_ns(end),
             "limit": limit
         }
+        if direction is not None:
+            params['direction'] = direction
 
         LOG.debug("Executing Loki query: %s", params)
         response = requests.get(url, params=params, headers=self._headers,
@@ -206,7 +217,8 @@ class LokiClient(object):
                 "Failed to query logs or empty result: %d - %s",
                 response.status_code, response.text
             )
-            data = []
+            raise exceptions.QueryError(
+                '{} - {}'.format(response.status_code, response.text))
         return data
 
     def push(self):
@@ -272,7 +284,34 @@ class LokiClient(object):
         query = self._build_query(filters)
         self.delete_by_query(query, begin, end)
 
-    def _retrieve(self, begin, end, filters, metric_types, limit):
+    @staticmethod
+    def _flatten_streams(streams):
+        output = []
+        for item in streams:
+            if not isinstance(item, dict):
+                continue
+            for value in item.get('values', []):
+                output.append({
+                    'stream': item.get('stream', {}),
+                    'values': [value],
+                })
+        output.sort(key=LokiClient._entry_timestamp)
+        return output
+
+    @staticmethod
+    def _entry_timestamp(entry):
+        return int(entry['values'][0][0])
+
+    @staticmethod
+    def _entry_key(entry):
+        return (
+            LokiClient._entry_timestamp(entry),
+            entry['values'][0][1],
+            tuple(sorted(entry.get('stream', {}).items())),
+        )
+
+    def _retrieve(self, begin, end, filters, metric_types, limit,
+                  direction=None):
         """Retrieves dataframes stored in Loki."""
         query = self._build_query(filters, metric_types=metric_types)
 
@@ -281,7 +320,8 @@ class LokiClient(object):
             query, begin, end, limit
         )
 
-        data_response = self.search(query, begin, end, limit)
+        data_response = self.search(
+            query, begin, end, limit, direction=direction)
 
         if not isinstance(data_response, dict) or \
            'stats' not in data_response or \
@@ -292,34 +332,97 @@ class LokiClient(object):
                 "received: %s",
                 query, data_response
             )
-            return 0, []
+            raise exceptions.QueryError(data_response)
 
-        total = data_response.get('stats', {})\
-            .get('summary', {})\
-            .get('totalEntriesReturned', 0)
-        output = data_response.get('result', [])
+        output = self._flatten_streams(data_response.get('result', []))
+
+        return len(output), output
+
+    def _time_ranges(self, begin, end):
+        step = datetime.timedelta(days=self._shard_days)
+        current_begin = begin
+        while current_begin < end:
+            current_end = min(current_begin + step, end)
+            yield current_begin, current_end
+            current_begin = current_end
+
+    def _iter_retrieve_range(self, begin, end, filters, metric_types,
+                             query_limit):
+        cursor = self._timestamp_ns(begin)
+        end_ns = self._timestamp_ns(end)
+        seen_at_cursor = Counter()
+
+        while cursor < end_ns:
+            _total, entries = self._retrieve(
+                cursor, end_ns, filters, metric_types, query_limit,
+                direction='forward')
+            if not entries:
+                break
+
+            remaining_seen = seen_at_cursor.copy()
+            new_entries = []
+            for entry in entries:
+                key = self._entry_key(entry)
+                if self._entry_timestamp(entry) == cursor \
+                        and remaining_seen[key]:
+                    remaining_seen[key] -= 1
+                else:
+                    new_entries.append(entry)
+
+            if new_entries:
+                yield new_entries
+
+            if len(entries) < query_limit:
+                break
+
+            last_timestamp = self._entry_timestamp(entries[-1])
+            if last_timestamp == cursor:
+                if not new_entries:
+                    raise exceptions.QueryLimitExceeded(
+                        query_limit, cursor)
+                seen_at_cursor.update(
+                    self._entry_key(entry) for entry in new_entries)
+            else:
+                cursor = last_timestamp
+                seen_at_cursor = Counter(
+                    self._entry_key(entry) for entry in entries
+                    if self._entry_timestamp(entry) == cursor)
+
+    def iter_retrieve(self, begin, end, filters, metric_types,
+                      query_limit=MAX_QUERY_LIMIT):
+        for current_begin, current_end in self._time_ranges(begin, end):
+            for entries in self._iter_retrieve_range(
+                    current_begin, current_end, filters, metric_types,
+                    query_limit):
+                yield entries
+
+    def retrieve(self, begin, end, filters, metric_types, limit,
+                 offset=0, paginate=True):
+        total = 0
+        output = []
+
+        for entries in self.iter_retrieve(
+                begin, end, filters, metric_types):
+            first = max(offset - total, 0)
+            total += len(entries)
+            if not paginate:
+                output += entries
+            elif first < len(entries) and len(output) < limit:
+                remaining = limit - len(output)
+                output += entries[first:first + remaining]
 
         return total, output
 
-    def retrieve(self, begin, end, filters, metric_types, limit):
-        total = 0
-        data = []
-        if end - begin > datetime.timedelta(days=self._shard_days):
-            step = datetime.timedelta(days=self._shard_days)
-            current_begin = begin
-
-            while current_begin < end:
-                current_end = min(current_begin + step, end)
-                t, d = self._retrieve(
-                    current_begin, current_end, filters, metric_types, limit)
-                total += t
-                data += d
-                current_begin = current_end
-        else:
-            total, data = self._retrieve(
-                begin, end, filters, metric_types, limit)
-
-        return total, data
+    def get_bounds(self, begin, end):
+        output = []
+        for current_begin, current_end in self._time_ranges(begin, end):
+            for direction in ('forward', 'backward'):
+                _total, entries = self._retrieve(
+                    current_begin, current_end, None, None, 1,
+                    direction=direction)
+                if entries:
+                    output.append(entries[0])
+        return output
 
     def add_point(self, point, type, start, end):
         """Append a point to the client, grouped by project_id."""
@@ -383,11 +486,9 @@ class LokiClient(object):
                 "will be ignored.", custom_fields
             )
 
-        if offset != 0:
-            LOG.warning("offset is not supported by Loki.")
-
         total_count, data = self.retrieve(
-                begin, end, filters, metric_types, limit)
+                begin, end, filters, metric_types, limit,
+                paginate=False)
 
         if not groupby:
             total_qty = 0.0
@@ -444,4 +545,7 @@ class LokiClient(object):
                 'sum_price': {'value': values['sum_price']}
             })
 
-        return len(result), result
+        total = len(result)
+        if paginate:
+            result = result[offset:offset + limit]
+        return total, result

@@ -135,10 +135,7 @@ class CopyDataFramesTest(tests.TestCase):
         source = mock.Mock()
         destination = mock.Mock()
         frame = mock.sentinel.frame
-        source.retrieve.return_value = {
-            'total': 1,
-            'dataframes': [frame],
-        }
+        source.iter_dataframes.return_value = iter([[frame]])
 
         copied = storage_migrate.copy_dataframes(
             source,
@@ -150,11 +147,10 @@ class CopyDataFramesTest(tests.TestCase):
 
         self.assertEqual(1, copied)
         destination.push.assert_called_once_with([frame])
-        source.retrieve.assert_called_once_with(
-            begin=datetime.datetime(2024, 1, 1, 0, 0),
-            end=datetime.datetime(2024, 1, 2, 0, 0),
-            offset=0,
-            limit=10,
+        source.iter_dataframes.assert_called_once_with(
+            datetime.datetime(2024, 1, 1, 0, 0),
+            datetime.datetime(2024, 1, 2, 0, 0),
+            10,
         )
 
     def test_copy_dataframes_copies_multiple_pages(self):
@@ -165,10 +161,10 @@ class CopyDataFramesTest(tests.TestCase):
             mock.sentinel.frame2,
             mock.sentinel.frame3,
         ]
-        source.retrieve.side_effect = [
-            {'total': 3, 'dataframes': frames[:2]},
-            {'total': 3, 'dataframes': frames[2:]},
-        ]
+        source.iter_dataframes.return_value = iter([
+            frames[:2],
+            frames[2:],
+        ])
 
         copied = storage_migrate.copy_dataframes(
             source,
@@ -187,7 +183,7 @@ class CopyDataFramesTest(tests.TestCase):
     def test_copy_dataframes_stops_on_source_retrieve_failure(self):
         source = mock.Mock()
         destination = mock.Mock()
-        source.retrieve.side_effect = RuntimeError('retrieve failed')
+        source.iter_dataframes.side_effect = RuntimeError('retrieve failed')
 
         self.assertRaises(
             RuntimeError,
@@ -203,10 +199,9 @@ class CopyDataFramesTest(tests.TestCase):
     def test_copy_dataframes_stops_on_destination_push_failure(self):
         source = mock.Mock()
         destination = mock.Mock()
-        source.retrieve.return_value = {
-            'total': 1,
-            'dataframes': [mock.sentinel.frame],
-        }
+        source.iter_dataframes.return_value = iter([
+            [mock.sentinel.frame],
+        ])
         destination.push.side_effect = RuntimeError('push failed')
 
         self.assertRaises(
@@ -453,6 +448,89 @@ class StorageMigrationCommandTest(tests.TestCase):
             ).run()
 
         source.get_bounds.assert_called_once_with()
+        empty_mock.assert_not_called()
+        copy_mock.assert_not_called()
+        verify_mock.assert_not_called()
+
+    def test_run_fails_when_begin_equals_end(self):
+        self.conf.set_override('version', 2, 'storage')
+        self.conf.set_override('backend', 'opensearch', 'storage')
+
+        source = mock.Mock()
+        destination = mock.Mock()
+        bound = datetime.datetime(2024, 1, 1, 0, 0)
+
+        with mock.patch.object(
+                storage_migrate.storage,
+                'get_storage',
+                side_effect=[source, destination]), \
+                mock.patch.object(
+                    storage_migrate,
+                    'overwrite_destination') as overwrite_mock, \
+                mock.patch.object(
+                    storage_migrate,
+                    'assert_destination_empty') as empty_mock, \
+                mock.patch.object(
+                    storage_migrate,
+                    'copy_dataframes') as copy_mock, \
+                mock.patch.object(
+                    storage_migrate,
+                    'verify_migration') as verify_mock:
+            self.assertRaises(
+                storage_migrate.StorageMigrationError,
+                storage_migrate.StorageMigrationCommand(
+                    'influxdb',
+                    begin=bound,
+                    end=bound,
+                    overwrite_destination=True,
+                ).run,
+            )
+
+        source.get_bounds.assert_not_called()
+        overwrite_mock.assert_not_called()
+        empty_mock.assert_not_called()
+        copy_mock.assert_not_called()
+        verify_mock.assert_not_called()
+
+    def test_run_fails_when_begin_is_after_discovered_end(self):
+        self.conf.set_override('version', 2, 'storage')
+        self.conf.set_override('backend', 'opensearch', 'storage')
+
+        source = mock.Mock()
+        source.get_bounds.return_value = {
+            'begin': datetime.datetime(2024, 1, 1, 0, 0),
+            'end': datetime.datetime(2024, 1, 2, 0, 0),
+        }
+        destination = mock.Mock()
+        begin = datetime.datetime(2024, 1, 3, 0, 0)
+
+        with mock.patch.object(
+                storage_migrate.storage,
+                'get_storage',
+                side_effect=[source, destination]), \
+                mock.patch.object(
+                    storage_migrate,
+                    'overwrite_destination') as overwrite_mock, \
+                mock.patch.object(
+                    storage_migrate,
+                    'assert_destination_empty') as empty_mock, \
+                mock.patch.object(
+                    storage_migrate,
+                    'copy_dataframes') as copy_mock, \
+                mock.patch.object(
+                    storage_migrate,
+                    'verify_migration') as verify_mock:
+            self.assertRaises(
+                storage_migrate.StorageMigrationError,
+                storage_migrate.StorageMigrationCommand(
+                    'influxdb',
+                    begin=begin,
+                    overwrite_destination=True,
+                ).run,
+            )
+
+        source.get_bounds.assert_called_once_with()
+        overwrite_mock.assert_not_called()
         empty_mock.assert_not_called()
         copy_mock.assert_not_called()
         verify_mock.assert_not_called()

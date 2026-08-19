@@ -129,22 +129,31 @@ class FakeLokiClient(loki_client_module.LokiClient):
             matched_points.append(log)
         return matched_points
 
-    def retrieve(self, begin, end, filters, metric_types, limit):
+    def retrieve(self, begin, end, filters, metric_types, limit,
+                 offset=0, paginate=True):
         points = self.__filter_func(begin, end, filters, metric_types)
 
         total = len(points)
 
-        if limit > 0:
-            effective_limit = limit
-        else:
-            effective_limit = 1000
-
-        output = points[:effective_limit]
+        output = points[offset:offset + limit] if paginate else points
 
         if not output:
             return 0, []
 
         return total, output
+
+    def iter_retrieve(self, begin, end, filters, metric_types,
+                      query_limit=5000):
+        points = self.__filter_func(begin, end, filters, metric_types)
+        for offset in range(0, len(points), query_limit):
+            yield points[offset:offset + query_limit]
+
+    def get_bounds(self, begin, end):
+        return list(self._logs)
+
+    def delete(self, begin, end, filters):
+        matched = self.__filter_func(begin, end, filters, None)
+        self._logs = [log for log in self._logs if log not in matched]
 
     def total(self, begin, end, metric_types, filters, groupby,
               custom_fields=None, offset=0, limit=1000, paginate=True):
