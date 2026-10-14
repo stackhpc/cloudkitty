@@ -80,6 +80,10 @@ Section ``fetcher_prometheus``.
 * ``filters``: Optional key-value dictionary to use additional metadata to
   filter out some of the Prometheus service response.
 
+* ``query_range``: Defaults to 10m. Range over which scope_ids should be
+  requested. This may be useful to increase on very large systems, if the
+  fetcher is seen failing to gather scope_ids.
+
 * ``prometheus_url``: Prometheus HTTP API URL.
 
 * ``prometheus_user``: For HTTP basic authentication. The username.

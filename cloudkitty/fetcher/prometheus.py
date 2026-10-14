@@ -63,6 +63,11 @@ fetcher_prometheus_opts = [
         default=dict(),
         help='Metadata to filter out the scope_ids discovery request response',
     ),
+    cfg.StrOpt(
+        'query_range',
+        default='10m',
+        help='Range over which scope_ids should be collected',
+    ),
 ]
 
 cfg.CONF.register_opts(fetcher_prometheus_opts, FETCHER_PROMETHEUS_OPTS)
@@ -98,6 +103,7 @@ class PrometheusFetcher(fetcher.BaseFetcher):
         metric = CONF.fetcher_prometheus.metric
         scope_attribute = CONF.fetcher_prometheus.scope_attribute
         filters = CONF.fetcher_prometheus.filters
+        query_range = CONF.fetcher_prometheus.query_range
 
         metadata = ''
         # Preformatting filters as {label1="value1", label2="value2"}
@@ -107,10 +113,11 @@ class PrometheusFetcher(fetcher.BaseFetcher):
             ]))
 
         # Formatting PromQL query
-        query = 'max({}{}) by ({})'.format(
+        query = 'group by ({}) (last_over_time({}{}[{}]))'.format(
+            scope_attribute,
             metric,
             metadata,
-            scope_attribute,
+            query_range
         )
 
         try:

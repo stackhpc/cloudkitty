@@ -35,7 +35,8 @@ class PrometheusFetcherTest(tests.TestCase):
 
     def test_get_tenants_build_query(self):
         query = (
-            'max(http_requests_total) by (namespace)'
+            'group by (namespace) '
+            '(last_over_time(http_requests_total[10m]))'
         )
 
         with mock.patch.object(
@@ -46,8 +47,8 @@ class PrometheusFetcherTest(tests.TestCase):
 
     def test_get_tenants_build_query_with_filter(self):
         query = (
-            'max(http_requests_total{label1="foo"})'
-            ' by (namespace)'
+            'group by (namespace) '
+            '(last_over_time(http_requests_total{label1="foo"}[10m]))'
         )
 
         self.conf.set_override(

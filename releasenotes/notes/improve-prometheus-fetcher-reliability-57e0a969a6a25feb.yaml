@@ -1,0 +1,7 @@
+---
+fixes:
+  - |
+    Fixes an issue where the Prometheus Fetcher could fail to look up metrics
+    if the query coincided with the relevant Prometheus Exporter refreshing its
+    metrics. See story 2011899
+    <https://storyboard.openstack.org/#!/story/2011899>`_ for more details.
